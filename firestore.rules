@@ -1,0 +1,198 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    // ═══════════════════════════════════════════════════════════════
+    // HELPERS — دوال مساعدة
+    // ═══════════════════════════════════════════════════════════════
+
+    // هل المستخدم مسجل دخول فعلاً؟
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // المستخدم الحالي = صاحب الـ document ده؟
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // قائمة الـ admins المعتمدة (تطابق مع constants/index.ts → ADMIN_EMAILS)
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email in [
+        'hello.simple.ai@gmail.com',
+        'ayman.abdelmohsen@gmail.com',
+      ];
+    }
+
+    // إستخراج الـ email بشكل آمن
+    function userEmail() {
+      return isSignedIn() ? request.auth.token.email : '';
+    }
+
+    // التحقق من أن الـ document المراد كتابته مش بيغير الـ role بشكل غير مصرّف
+    function doesNotEscalateRole() {
+      let after = request.resource.data;
+      let before = resource.data;
+      // لو مش admin، مينفعش تغير دورك أو تضيف role على الإطلاق
+      if (!isAdmin()) {
+        // لما user جديد بيتسجل، role بيبقى 'user' بس
+        if (before == null) {
+          return after.role is string && after.role == 'user';
+        }
+        // لما user بيعمل update، مينفعش يلمس الـ role أصلاً
+        return !('role' in after) || after.role == before.role;
+      }
+      // Admin يقدر يغير الـ roles
+      return true;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // USERS — المستخدمين
+    // ═══════════════════════════════════════════════════════════════
+    //
+    // Rules:
+    //  - Create: أي حد مسجل دخول يعمل document بنفس الـ UID بتاعه
+    //  - Read:   المستخدم يقرأ document بتاعه بس. Admin يقرأ الكل
+    //  - Write:  المستخدم يعدل document بتاعه بس (منع escalation للـ role). Admin الكل
+    //
+
+    match /users/{userId} {
+      allow create: if isOwner(userId) && doesNotEscalateRole();
+      allow read:   if isOwner(userId) || isAdmin();
+      allow update: if (isOwner(userId) && doesNotEscalateRole()) || isAdmin();
+      allow delete: if isAdmin(); // غير admin ممسحش حد
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // AUTH LOGS — سجلات تسجيل الدخول
+    // ═══════════════════════════════════════════════════════════════
+    //
+    // Rules:
+    //  - Create: المستخدم يسجل log بس يكون ب user ID بتاعه
+    //  - Read:   المستخدم بقرا logs بتاعه بس. Admin يقرأ الكل
+    //  - Update/Delete: ممنوعة على الكل غير admin (audit trail!)
+    //
+
+    match /auth_logs/{logId} {
+      allow create: if isSignedIn()
+        && request.resource.data.userId is string
+        && request.resource.data.userId == request.auth.uid;
+
+      allow read: if isSignedIn() && (
+          (resource.data.userId == request.auth.uid)
+          || isAdmin()
+        );
+
+      allow update, delete: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // BANNED NODES — قائمة المحظورين
+    // ═══════════════════════════════════════════════════════════════
+    //
+    // Rules:
+    //  - Read:  أي حد مسجل دخول يشوف هو نفسه محظور ولا لأ؟
+    //  - Write: Admin بس بيضيف/يمسح محظورين
+    //
+
+    match /banned_nodes/{nodeId} {
+      allow read:  if isSignedIn() && (nodeId == request.auth.uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // ADMIN SETTINGS — إعدادات المدير
+    // ═══════════════════════════════════════════════════════════════
+    //
+    // Rules:
+    //  - Admin read/write بس
+    //
+
+    match /admin_settings/{document=**} {
+      allow read, write: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // DEFAULT — باقي الـ Collections (محدش يوصل لها من غير definition)
+    // ═══════════════════════════════════════════════════════════════
+    //
+    // مبدأ أمني: Default Deny. أي collection مُتعرفش فوق ده ممنوع تماماً.
+    //
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// 🔥 FIREBASE STORAGE (اختياري — لو مستخدمين Storage بعدين)
+// ═══════════════════════════════════════════════════════════════════
+//
+// rules_version = '2';
+// service firebase.storage {
+//   match /b/{bucket}/o {
+//     match /users/{userId}/avatars/{allPaths=**} {
+//       allow read;  // avatars public للقراءة
+//       allow write: if request.auth != null && request.auth.uid == userId
+//         && request.resource.size < 5 * 1024 * 1024  // 5MB max
+//         && request.resource.contentType.matches('image/.*');
+//     }
+//     match /{allPaths=**} {
+//       allow read, write: if false;  // default deny
+//     }
+//   }
+// }
+
+// ═══════════════════════════════════════════════════════════════════
+// 📝 كيف تنشر الـ Rules دي؟
+// ═══════════════════════════════════════════════════════════════════
+//
+// الطريقة ١ — Firebase Console (السهلة):
+//   1. افتح https://console.firebase.google.com
+//   2. اختر مشروعك → Firestore Database → Rules
+//   3. الصق محتوى الملف ده كله واستبدل الـ Rules القديمة
+//   4. اضغط Publish
+//
+// الطريقة ٢ — Firebase CLI (للمطورين):
+//   (لو أنت مهندس وبيحب automation)
+//   ```powershell
+//   # تثبيت CLI أول مرة بس
+//   npm.cmd install -g firebase-tools
+//
+//   # تسجيل الدخول
+//   firebase login
+//
+//   # ربط المشروع (لو مش موصول)
+//   firebase init firestore
+//
+//   # نشر Rules
+//   firebase deploy --only firestore:rules
+//   ```
+//
+// الطريقة ٣ — من أجل CI/CD (بعدين لما يكون عندكم GitHub Actions):
+//   - احفظ Service Account JSON في GitHub Secrets كـ FIREBASE_SERVICE_ACCOUNT
+//   - شغّل: firebase deploy --only firestore:rules --token $FIREBASE_TOKEN
+//
+// ═══════════════════════════════════════════════════════════════════
+// ⚠️ ملاحظات الأمان الهامة
+// ═══════════════════════════════════════════════════════════════════
+//
+// 1. 🔥 خد بالك: الـ ADMIN_EMAILS دي hardcoded هنا و في constants/index.ts.
+//    لو زدت admin جديد لازم تحدثه في التنين مكانين!
+//
+// 2. 💡 اقتراح للإنتاج: خزن قائمة الـ admins في /admin_settings/admins
+//    واعمل isAdmin() تشيك على الـ document ده بدل الـ hardcode.
+//    مثال (بعدين):
+//      function isAdmin() {
+//        return isSignedIn() && exists(/databases/$(db)/documents/admin_settings/admins)
+//          && request.auth.token.email in get(/databases/$(db)/documents/admin_settings/admins).data.emails;
+//      }
+//
+// 3. ✅ بعد نشر Rules، جرب من الـ Playground في Firebase Console:
+//    - Login كـ user عادي → حاول تقرأ /users/غيرك → لازم يرفض
+//    - Login كـ admin → حاول تعمل ban → لازم يوافق
+//    - حاول تكتب في collection مش معرفة (مثل /test/abc) → لازم يرفض
+//
+// 4. 🚨 Audit logs (auth_logs): مسموح للـ user إنشاء بس، ومينفعش يعدلها أو يمسحها
+//    → ده الـ Audit Trail اللي هيحميك لو حد حاول يحذف login history بتاعه.

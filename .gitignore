@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Env & secrets — NEVER commit
+.env
+.env.*
+*.local
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.playwright-mcp/
+
+# TS incremental build
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Archives & session dumps
+*.zip
+.zcode/
+Fix/
