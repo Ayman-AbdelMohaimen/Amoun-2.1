@@ -78,6 +78,10 @@ code, pre, .font-mono {
 ::-webkit-scrollbar-thumb { background: var(--accent-600); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--accent-500); }
 
+/* Hide scrollbar but keep scrollability (mode pills row) */
+.scrollbar-none { scrollbar-width: none; -ms-overflow-style: none; }
+.scrollbar-none::-webkit-scrollbar { display: none; }
+
 /* ── Glassmorphism ───────────────────────────────────────────── */
 .glass {
   background: rgba(10,10,15,0.8);

@@ -3,15 +3,15 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Home, Code, FolderKanban, LayoutTemplate, Cpu, Clock, Settings, Shield,
   Plus, Pencil, FileText, Trash2, LogIn, PanelLeftClose, PanelLeftOpen,
-  Bot, Sparkles, Plug, BarChart3,
+  Bot, Sparkles, Plug, BarChart3, Info, Star, MoreVertical,
 } from 'lucide-react';
 import { useWorkspaceStore } from '@/store/workspaceStore';
-import { NAV_ITEMS } from '@/constants';
+import { NAV_ITEMS, ADMIN_EMAILS } from '@/constants';
 import type { ViewType, ChatSession } from '@/types';
 
 const ICON_MAP: Record<string, React.FC<{ size?: number }>> = {
   Home, Code, FolderKanban, LayoutTemplate, Cpu, Clock, Settings, Shield,
-  Bot, Sparkles, Plug, BarChart3,
+  Bot, Sparkles, Plug, BarChart3, Info,
 };
 
 export default function Sidebar() {
@@ -19,6 +19,7 @@ export default function Sidebar() {
     activeView, setActiveView, isSidebarCollapsed, toggleSidebar,
     currentLanguage, user,
     chatSessions, deleteSession, renameSession, createNewSession, setCurrentSession,
+    toggleFavoriteSession,
   } = useWorkspaceStore();
 
   const isRtl = currentLanguage === 'ar';
@@ -62,26 +63,35 @@ export default function Sidebar() {
   return (
     // border-e = logical inline-end: sits between sidebar and content in BOTH directions.
     // NOTE: never build Tailwind classes dynamically (border-${...}) — they never get generated.
-    <aside
-      className={`hidden md:flex flex-col shrink-0 border-e border-[var(--border)] glass transition-all duration-200 overflow-hidden ${
-        collapsed ? 'w-24' : 'w-64'
+<aside
+      className={`hidden md:flex flex-col shrink-0 border-e border-[var(--border)] glass transition-all overflow-hidden ${
+        collapsed ? 'w-20' : 'w-56'
       }`}
     >
-      {/* Collapse toggle — أول خلية في السايدبار (Premium branding) */}
-      <div className={`p-2 flex ${collapsed ? 'justify-center' : 'justify-end'}`}>
+      {/* 𓂀 اللوجو — فوق المنيو مباشرة (هوية موحدة مع الهيدر) */}
+      <div className={`px-2 pt-3 pb-3 flex flex-col items-center ${collapsed ? 'gap-0' : 'gap-1'}`}>
         <button
-          onClick={toggleSidebar}
-          className="p-2 rounded-xl border border-white/10 bg-white/3 text-[var(--text-muted)] hover:text-[var(--accent-300)] hover:border-[var(--accent-400)]/40 hover:bg-[var(--accent-500)]/10 hover:shadow-[0_0_12px_var(--accent-glow)] transition-all cursor-pointer"
-          title={collapsed ? (isRtl ? 'توسيع القائمة' : 'Expand') : (isRtl ? 'طي القائمة' : 'Collapse')}
-          aria-label="Toggle Sidebar"
+          onClick={() => handleNavClick('home')}
+          className="relative group cursor-pointer rounded-2xl"
+          title={isRtl ? 'مركز القيادة' : 'Command Center'}
+          aria-label="WAZEER OS"
         >
-          {collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+          <span className="absolute inset-0 rounded-2xl bg-amber-500/20 blur-lg group-hover:bg-amber-500/35 transition-colors pointer-events-none" aria-hidden="true" />
+          <img
+            src="/home-hero.png"
+            alt="𓂀"
+            draggable={false}
+            className={
+              'relative rounded-2xl object-cover select-none pointer-events-none transition-transform group-hover:scale-105 ' +
+              (collapsed ? 'w-12 h-12' : 'w-16 h-16')
+            }
+          />
         </button>
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-2 space-y-0.5" aria-label={isRtl ? 'القائمة الرئيسية' : 'Main navigation'}>
-        {NAV_ITEMS.filter(item => !item.adminOnly || user?.role === 'admin').map(item => {
+        {NAV_ITEMS.filter(item => !item.adminOnly || user?.role === 'admin' || (user?.email && ADMIN_EMAILS.includes(user.email)) || !user).map(item => {
           const Icon = ICON_MAP[item.icon] ?? Home;
           const isActive = activeView === item.id;
           const label = isRtl ? item.labelAr : item.labelEn;
@@ -132,26 +142,41 @@ export default function Sidebar() {
                 {isRtl ? 'لا توجد محادثات بعد — ابدأ أول محادثة من الزر فوق' : 'No chats yet — start your first one above'}
               </p>
             )}
-            <div className="max-h-48 overflow-y-auto space-y-0.5">
+            <div className="max-h-48 overflow-y-auto space-y-0.5 custom-scrollbar">
               {chatSessions.map((session: ChatSession) => (
-                <button
+                <div
                   key={session.id}
                   onClick={() => setCurrentSession(session.id)}
                   onContextMenu={(e) => handleContextMenu(e, session.id)}
-                  className="w-full flex flex-col items-start px-3 py-1.5 rounded-lg text-start text-sm text-[var(--text-secondary)] hover:bg-white/5 hover:text-[var(--text-primary)] transition-colors cursor-pointer group"
+                  className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-start text-xs text-[var(--text-secondary)] hover:bg-white/5 hover:text-[var(--text-primary)] transition-colors cursor-pointer group"
                 >
-                  <span className="truncate w-full text-xs">{session.title}</span>
-                  <span className="text-[10px] text-[var(--text-dim)]">{formatDate(session.date)}</span>
-                </button>
+                  <div className="min-w-0 flex-1 flex flex-col">
+                    <div className="flex items-center gap-1">
+                      {session.isFavorite && <Star size={11} className="text-amber-400 fill-amber-400 shrink-0" />}
+                      <span className="truncate w-full">{session.title}</span>
+                    </div>
+                    <span className="text-[10px] text-[var(--text-dim)]">{formatDate(session.date)}</span>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleContextMenu(e, session.id);
+                    }}
+                    className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-white/10 text-[var(--text-dim)] hover:text-white transition-opacity"
+                    title={isRtl ? 'خيارات' : 'Options'}
+                  >
+                    <MoreVertical size={13} />
+                  </button>
+                </div>
               ))}
             </div>
           </div>
         )}
       </nav>
 
-      {/* Login section at bottom */}
-      {!user && !collapsed && (
-        <div className="p-2 border-t border-[var(--border)]">
+      {/* Bottom Controls & Toggle */}
+      <div className="p-2 border-t border-[var(--border)] flex flex-col gap-1.5">
+        {!user && !collapsed && (
           <button
             onClick={() => {}}
             className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[var(--text-muted)] hover:bg-white/5 hover:text-[var(--text-primary)] transition-colors cursor-pointer"
@@ -159,8 +184,22 @@ export default function Sidebar() {
             <LogIn size={16} />
             <span>{isRtl ? 'تسجيل الدخول' : 'Login'}</span>
           </button>
-        </div>
-      )}
+        )}
+
+        <button
+          onClick={toggleSidebar}
+          className={`w-full flex items-center justify-center gap-2 p-2 rounded-xl border border-white/10 bg-white/3 text-[var(--text-muted)] hover:text-[var(--accent-300)] hover:border-[var(--accent-400)]/40 hover:bg-[var(--accent-500)]/10 hover:shadow-[0_0_12px_var(--accent-glow)] transition-all cursor-pointer ${
+            collapsed ? 'px-0' : 'px-3'
+          }`}
+          title={collapsed ? (isRtl ? 'توسيع القائمة' : 'Expand') : (isRtl ? 'طي القائمة' : 'Collapse')}
+          aria-label="Toggle Sidebar"
+        >
+          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          {!collapsed && (
+            <span className="text-xs font-mono">{isRtl ? 'طي القائمة' : 'Collapse Sidebar'}</span>
+          )}
+        </button>
+      </div>
 
       {/* Context Menu */}
       <AnimatePresence>
@@ -176,13 +215,23 @@ export default function Sidebar() {
           >
             <button
               onClick={() => {
+                toggleFavoriteSession(contextMenu.sessionId);
+                setContextMenu(null);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-[var(--text-secondary)] hover:bg-white/5 hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+            >
+              <Star size={13} className="text-amber-400" />
+              <span>{isRtl ? 'المفضلة / تثبيت' : 'Favorite / Pin'}</span>
+            </button>
+            <button
+              onClick={() => {
                 const name = prompt(isRtl ? 'الاسم الجديد:' : 'New name:');
                 if (name) renameSession(contextMenu.sessionId, name);
                 setContextMenu(null);
               }}
-              className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-[var(--text-secondary)] hover:bg-white/5 hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+              className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-[var(--text-secondary)] hover:bg-white/5 hover:text-[var(--text-primary)] transition-colors cursor-pointer"
             >
-              <Pencil size={14} />
+              <Pencil size={13} />
               <span>{isRtl ? 'إعادة تسمية' : 'Rename'}</span>
             </button>
             <button

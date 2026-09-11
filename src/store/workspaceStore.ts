@@ -14,6 +14,7 @@ import type {
   ChatSession,
   ChatMode,
   CustomModel,
+  CustomSkill,
   LLMProviderId,
   Project,
   PromptTemplate,
@@ -29,7 +30,8 @@ import { processPrompt } from '@/services/AIGateway';
 import { extractTasks, stripTaskJSONFromResponse } from '@/services/learning/LearningEngine';
 import { extractMemories } from '@/services/learning/MemoryEngine';
 import { buildContextualPrompt } from '@/services/learning/ContextBuilder';
-import { humanizeError, unwrapErrorMessage } from '@/lib/errorHumanize';
+import { compactMessages } from '@/services/learning/TokenManager';
+import { humanizeError, unwrapErrorMessage, isApiKeyError } from '@/lib/errorHumanize';
 import type { ImportedTaskDraft } from '@/lib/importers';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -64,20 +66,88 @@ interface PersistedState {
   activityDates: string[];
   /** Amoun's daily suggestion (generated once per day) */
   dailySuggestion: { text: string; reason: string; date: string } | null;
+  /** User-created custom skills */
+  customSkills: CustomSkill[];
+  /** IDs of skills that are currently enabled (both built-in and custom) */
+  enabledSkillIds: string[];
 }
+
+const SETTINGS_KEY = 'global_settings';
 
 async function loadPersistedState(): Promise<Partial<PersistedState>> {
   try {
     await wazeerDB.init();
-    const raw = await wazeerDB.get<Record<string, PersistedState>>('state', PERSIST_KEY);
-    return raw?.[PERSIST_KEY] ?? {};
-  } catch {
+
+    // 1. Check for modern granular settings
+    const settingsRaw = await wazeerDB.get<Record<string, unknown>>('state', SETTINGS_KEY);
+    const globalSettings = (settingsRaw?.[SETTINGS_KEY] as Partial<PersistedState>) ?? {};
+
+    // 2. Load individual sessions if present in new granular format
+    const sessionIndexRecords = await wazeerDB.get<{ id: string; sessionIds: string[] }>('state', 'session_index');
+    let loadedSessions: ChatSession[] = [];
+
+    if (sessionIndexRecords?.sessionIds && sessionIndexRecords.sessionIds.length > 0) {
+      for (const sId of sessionIndexRecords.sessionIds) {
+        const sMeta = await wazeerDB.get<{ id: string; meta: Omit<ChatSession, 'messages'> }>('state', `session_meta_${sId}`);
+        const sMsgs = await wazeerDB.get<{ id: string; messages: ChatMessage[] }>('state', `session_msgs_${sId}`);
+        if (sMeta?.meta) {
+          loadedSessions.push({
+            ...sMeta.meta,
+            messages: sMsgs?.messages ?? [],
+          });
+        }
+      }
+    }
+
+    // 3. Fallback / Migration: check legacy single blob
+    if (loadedSessions.length === 0) {
+      const legacyRaw = await wazeerDB.get<Record<string, PersistedState>>('state', PERSIST_KEY);
+      const legacyState = legacyRaw?.[PERSIST_KEY];
+      if (legacyState) {
+        // Return full legacy state for rehydration and auto-migration on next save
+        return {
+          ...legacyState,
+          ...globalSettings,
+          chatSessions: legacyState.chatSessions ?? [],
+        };
+      }
+    }
+
+    return {
+      ...globalSettings,
+      chatSessions: loadedSessions,
+    };
+  } catch (err) {
+    console.warn('[workspaceStore] Failed to load persisted state:', err);
     return {};
   }
 }
 
 async function savePersistedState(state: Partial<PersistedState>): Promise<void> {
   try {
+    const { chatSessions, ...globalSettings } = state;
+
+    // 1. Save global settings record
+    await wazeerDB.put('state', { id: SETTINGS_KEY, [SETTINGS_KEY]: globalSettings });
+
+    // 2. Granular session save (sessions/{sessionId}/metadata & messages)
+    if (chatSessions) {
+      const sessionIds: string[] = [];
+
+      for (const session of chatSessions) {
+        sessionIds.push(session.id);
+        const { messages, ...meta } = session;
+        // Save metadata record
+        await wazeerDB.put('state', { id: `session_meta_${session.id}`, meta });
+        // Save messages record
+        await wazeerDB.put('state', { id: `session_msgs_${session.id}`, messages });
+      }
+
+      // Save index of session IDs
+      await wazeerDB.put('state', { id: 'session_index', sessionIds });
+    }
+
+    // 3. Keep backward-compatible legacy snapshot for fallback safety
     await wazeerDB.put('state', { id: PERSIST_KEY, [PERSIST_KEY]: state });
   } catch (err) {
     console.warn('[workspaceStore] Failed to persist state:', err);
@@ -249,6 +319,13 @@ interface WorkspaceState extends PersistedState {
   deleteSession: (id: string) => void;
   renameSession: (id: string, title: string) => void;
   setCurrentSession: (id: string) => void;
+  /** Toggle favorite/pinned status on session (Manus mini-menu) */
+  toggleFavoriteSession: (id: string) => void;
+
+  // Skills Management
+  addCustomSkill: (skill: Omit<CustomSkill, 'id' | 'createdAt'>) => void;
+  deleteCustomSkill: (id: string) => void;
+  toggleSkill: (skillId: string) => void;
 
   // Chat — the main action
   sendMessage: (text: string, attachment?: Attachment) => Promise<void>;
@@ -258,6 +335,13 @@ interface WorkspaceState extends PersistedState {
   retryMessage: (messageId: string) => Promise<void>;
   /** 👎 شبشب / 😍 قلوب — saves feedback + corrective memory on 👎 */
   rateMessage: (messageId: string, rating: 'up' | 'down', tags?: string[]) => void;
+
+  // Prompt Templates — CRUD (Templates view)
+  addTemplate: (t: Omit<PromptTemplate, 'id' | 'isBuiltIn'>) => void;
+  updateTemplate: (id: string, patch: Partial<PromptTemplate>) => void;
+  deleteTemplate: (id: string) => void;
+  /** ▶️ Use a template — fresh session + send its content + open the workspace */
+  useTemplate: (id: string) => Promise<void>;
 
   // Tasks
   addTask: (text: string, source?: Task['source']) => void;
@@ -270,8 +354,9 @@ interface WorkspaceState extends PersistedState {
   runTask: (id: string) => void;
 
   // Projects
-  addProject: (name: string, summary?: string) => void;
+  addProject: (name: string, summary?: string, links?: string[], hasDocs?: boolean) => Promise<string>;
   deleteProject: (id: string) => void;
+  setCurrentProject: (projectId: string | null) => void;
 
   // Governance Council (Memory Purification) — progressive resets
   /** Level 1: delete general (non-project) chat sessions. Returns removed count. */
@@ -338,6 +423,11 @@ const DEFAULTS: PersistedState = {
   hiddenModelIds: [],
   activityDates: [],
   dailySuggestion: null,
+  customSkills: [],
+  enabledSkillIds: [
+    'horus-guard', 'amoun-memory', 'task-extraction', 'task-scheduler',
+    'voice-tts', 'append-event-log', 'model-tester', 'corrective-learning'
+  ],
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -473,17 +563,19 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   createNewSession: (projectId) => {
     const sessionId = crypto.randomUUID();
+    const targetProjectId = projectId !== undefined ? projectId : (get().currentProjectId ?? undefined);
     const session: ChatSession = {
       id: sessionId,
       title: 'محادثة جديدة',
       messages: [],
       date: new Date().toISOString(),
-      projectId: projectId ?? get().currentProjectId ?? undefined,
+      projectId: targetProjectId,
       modelId: get().activeModel,
     };
     set((s) => ({
       chatSessions: [session, ...s.chatSessions],
       currentSessionId: sessionId,
+      currentProjectId: targetProjectId ?? null,
       activeView: 'workspace',
     }));
     get()._persist();
@@ -509,6 +601,56 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   setCurrentSession: (id) => {
     set({ currentSessionId: id, activeView: 'workspace' });
+    get()._persist();
+  },
+
+  toggleFavoriteSession: (id) => {
+    set((s) => ({
+      chatSessions: s.chatSessions.map((cs) =>
+        cs.id === id ? { ...cs, isFavorite: !cs.isFavorite } : cs,
+      ),
+    }));
+    get()._persist();
+  },
+
+  // ── Skills Management ───────────────────────────────────────────
+
+  addCustomSkill: (skill) => {
+    const newSkill: CustomSkill = {
+      ...skill,
+      id: crypto.randomUUID(),
+      enabled: skill.enabled ?? true,
+      createdAt: new Date().toISOString(),
+    };
+    set((s) => ({
+      customSkills: [...s.customSkills, newSkill],
+      enabledSkillIds: newSkill.enabled ? [...s.enabledSkillIds, newSkill.id] : s.enabledSkillIds,
+    }));
+    get()._persist();
+  },
+
+  deleteCustomSkill: (id) => {
+    set((s) => ({
+      customSkills: s.customSkills.filter((sk) => sk.id !== id),
+      enabledSkillIds: s.enabledSkillIds.filter((skId) => skId !== id),
+    }));
+    get()._persist();
+  },
+
+  toggleSkill: (skillId) => {
+    set((s) => {
+      const isEnabled = s.enabledSkillIds.includes(skillId);
+      const nextEnabled = isEnabled
+        ? s.enabledSkillIds.filter((id) => id !== skillId)
+        : [...s.enabledSkillIds, skillId];
+      const nextCustom = s.customSkills.map((sk) =>
+        sk.id === skillId ? { ...sk, enabled: !isEnabled } : sk,
+      );
+      return {
+        enabledSkillIds: nextEnabled,
+        customSkills: nextCustom,
+      };
+    });
     get()._persist();
   },
 
@@ -607,10 +749,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       }
     };
 
-    // Resolve the current session for the handler
+    // Resolve the current session for the handler & apply automatic context compaction if needed
     const getSessionMessages = () => {
       const s = get().chatSessions.find((cs) => cs.id === currentSessionId);
-      return s?.messages.filter((m) => m.role !== 'system') ?? [];
+      const raw = s?.messages.filter((m) => m.role !== 'system') ?? [];
+      const { compactedMessages, compactedCount } = compactMessages(raw, state.activeModel, 0.7);
+      if (compactedCount > 0) {
+        console.info(`[workspaceStore] Auto-compacted ${compactedCount} earlier messages to prevent token overflow.`);
+      }
+      return compactedMessages;
     };
 
     // Build system prompt with context injection (async)
@@ -622,6 +769,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       projects: state.projects,
       currentProjectId: state.currentProjectId,
       userQuery: text,
+      customSkills: state.customSkills,
+      enabledSkillIds: state.enabledSkillIds,
     });
 
     // Auto-resolve correct providerId for the active model
@@ -692,29 +841,39 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const displayContent = stripTaskJSONFromResponse(rawContent);
       const totalTokens = response.tokensUsed.input + response.tokensUsed.output;
 
-      set((s) => ({
-        chatSessions: s.chatSessions.map((cs) => {
-          if (cs.id !== currentSessionId) return cs;
-          return {
-            ...cs,
-            messages: cs.messages.map((m) =>
-              m.id === assistantMessage.id
-                ? {
-                    ...m,
-                    content: displayContent,
-                    isStreaming: false,
-                    tokensUsed: totalTokens,
-                    toolCalls: response.toolCalls,
-                  }
-                : m,
-            ),
-          };
-        }),
-        isGenerating: false,
-        abortController: null,
-        generationStatus: '',
-        generationStartedAt: null,
-      }));
+      set((s) => {
+        // Persist generation transparency onto the message record — the counter
+        // and final Arabic status outlive the volatile GenerationIndicator (UX)
+        const genSeconds = s.generationStartedAt
+          ? Math.max(1, Math.round((Date.now() - s.generationStartedAt) / 1000))
+          : undefined;
+        const finalStatus = isRtl ? '✅ اكتمل' : '✅ Done';
+        return {
+          chatSessions: s.chatSessions.map((cs) => {
+            if (cs.id !== currentSessionId) return cs;
+            return {
+              ...cs,
+              messages: cs.messages.map((m) =>
+                m.id === assistantMessage.id
+                  ? {
+                      ...m,
+                      content: displayContent,
+                      isStreaming: false,
+                      tokensUsed: totalTokens,
+                      toolCalls: response.toolCalls,
+                      generationSeconds: genSeconds,
+                      generationFinalStatus: finalStatus,
+                    }
+                  : m,
+              ),
+            };
+          }),
+          isGenerating: false,
+          abortController: null,
+          generationStatus: '',
+          generationStartedAt: null,
+        };
+      });
 
       // ── Extract artifacts from code blocks ──
       if (rawContent) {
@@ -781,6 +940,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       // Check if aborted
       if (isAbort) {
         cancelFlush();
+        const stoppedSeconds = get().generationStartedAt
+          ? Math.max(1, Math.round((Date.now() - get().generationStartedAt!) / 1000))
+          : undefined;
         clearGenStatus();
         set((s) => ({
           chatSessions: s.chatSessions.map((cs) => {
@@ -789,7 +951,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
               ...cs,
               messages: cs.messages.map((m) =>
                 m.id === assistantMessage.id
-                  ? { ...m, content: streamedContent || (isRtl ? '⏹ تم الإيقاف' : '⏹ Stopped'), isStreaming: false }
+                  ? {
+                      ...m,
+                      content: streamedContent || (isRtl ? '⏹ تم الإيقاف' : '⏹ Stopped'),
+                      isStreaming: false,
+                      generationSeconds: stoppedSeconds,
+                      generationFinalStatus: isRtl ? '⏹ اتوقف' : '⏹ Stopped',
+                    }
                   : m,
               ),
             };
@@ -802,8 +970,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
       // Real error — show a humanized message in the assistant bubble
       cancelFlush();
+      const failedSeconds = get().generationStartedAt
+        ? Math.max(1, Math.round((Date.now() - get().generationStartedAt!) / 1000))
+        : undefined;
       clearGenStatus();
       const errorMessage = humanizeError(unwrapErrorMessage(rawMessage), isRtl);
+      const apiKeyError = isApiKeyError(rawMessage);
       console.error('[workspaceStore] sendMessage error:', rawMessage);
 
       set((s) => ({
@@ -813,7 +985,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
             ...cs,
             messages: cs.messages.map((m) =>
               m.id === assistantMessage.id
-                ? { ...m, content: `❌ ${errorMessage}`, isStreaming: false }
+                ? {
+                    ...m,
+                    content: `❌ ${errorMessage}`,
+                    isStreaming: false,
+                    generationSeconds: failedSeconds,
+                    generationFinalStatus: isRtl ? '⛔ فشل' : '⛔ Failed',
+                    apiKeyError,
+                  }
                 : m,
             ),
           };
@@ -849,6 +1028,36 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (abortController) {
       abortController.abort();
     }
+  },
+
+  addTemplate: (t) => {
+    set((s) => ({
+      promptTemplates: [
+        ...s.promptTemplates,
+        { ...t, id: crypto.randomUUID(), isBuiltIn: false },
+      ],
+    }));
+    get()._persist();
+  },
+
+  updateTemplate: (id, patch) => {
+    set((s) => ({
+      promptTemplates: s.promptTemplates.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+    }));
+    get()._persist();
+  },
+
+  deleteTemplate: (id) => {
+    set((s) => ({ promptTemplates: s.promptTemplates.filter((t) => t.id !== id || t.isBuiltIn) }));
+    get()._persist();
+  },
+
+  useTemplate: async (id) => {
+    const t = get().promptTemplates.find((x) => x.id === id);
+    if (!t) return;
+    if (!get().currentSessionId) get().createNewSession();
+    set({ activeView: 'workspace' });
+    await get().sendMessage(t.content);
   },
 
   rateMessage: (messageId, rating, tags) => {
@@ -1076,18 +1285,123 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   // ── Projects ────────────────────────────────────────────────────
 
-  addProject: (name, summary = '') => {
+  addProject: async (name, summary = '', links = [], hasDocs = false) => {
+    const projectId = crypto.randomUUID();
+    const sessionId = crypto.randomUUID();
+    const initialFiles: string[] = [];
+
+    // If hasDocs is enabled, generate real SDD Architecture docs & files as artifacts in IndexedDB
+    if (hasDocs) {
+      const sddDoc: Artifact = {
+        id: crypto.randomUUID(),
+        type: 'markdown',
+        title: `${name.toLowerCase().replace(/\s+/g, '-')}-sdd-architecture.md`,
+        content: `# 🏗️ ${name} — System Design Document (SDD)\n\n## 1. Executive Summary & Vision\n${summary || 'Comprehensive architecture specification and engineering roadmap.'}\n\n## 2. Architectural Layers\n- **Presentation Layer**: Client UI & reactive state management\n- **Service Orchestration**: AI Gateway & tool pipeline\n- **Data Storage**: IndexedDB persistence & local caching\n\n## 3. Core Requirements & Milestones\n- [ ] MVP Setup & Core Data Pipeline\n- [ ] Multi-Agent Coordination\n- [ ] Validation & Test Automation\n\n${links.length > 0 ? `## 4. References & External Endpoints\n${links.map((l) => `- ${l}`).join('\n')}\n` : ''}`,
+        language: 'markdown',
+        chatId: sessionId,
+        messageId: 'system-init',
+        createdAt: new Date().toISOString(),
+        pinned: true,
+        tags: ['sdd', 'architecture', 'docs'],
+        projectId,
+      };
+
+      const planDoc: Artifact = {
+        id: crypto.randomUUID(),
+        type: 'markdown',
+        title: `${name.toLowerCase().replace(/\s+/g, '-')}-execution-plan.md`,
+        content: `# 📋 ${name} — Execution Plan & Roadmap\n\n### Phase 1: MVP Core\n- [x] Initial Architecture & SDD generated\n- [ ] Setup base contracts and schema\n\n### Phase 2: Feature Development\n- [ ] Implement core workflows and integrations\n- [ ] Connect multi-agent swarm routines\n\n### Phase 3: Production Polish\n- [ ] End-to-end testing and performance audits\n- [ ] Deployment and continuous verification`,
+        language: 'markdown',
+        chatId: sessionId,
+        messageId: 'system-init',
+        createdAt: new Date().toISOString(),
+        pinned: true,
+        tags: ['plan', 'roadmap', 'docs'],
+        projectId,
+      };
+
+      await wazeerDB.put('artifacts', sddDoc).catch(() => {});
+      await wazeerDB.put('artifacts', planDoc).catch(() => {});
+
+      initialFiles.push(sddDoc.title, planDoc.title);
+    }
+
+    const initialSession: ChatSession = {
+      id: sessionId,
+      title: `${name} — جلسة البدء`,
+      messages: [
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: `👑 **أهلاً بك في بيئة عمل مشروع: ${name}**\n\n${summary ? `> ${summary}\n\n` : ''}${hasDocs ? '✅ **تم تأسيس وتوليد ملفات الـ SDD والمخططات المعمارية بنجاح:**\n- ' + initialFiles.join('\n- ') + '\n\nيمكنك الاطلاع عليها وتعديلها من لوحة البرديات أو طلب أي تعديلات معمارية مني مباشرة.' : 'جاهز لمساعدتك في بناء وتطوير المشروع وتخطيط مهامه.'}`,
+          timestamp: new Date().toISOString(),
+          model: get().activeModel,
+        },
+      ],
+      date: new Date().toISOString(),
+      projectId,
+      modelId: get().activeModel,
+    };
+
     const project: Project = {
-      id: crypto.randomUUID(),
+      id: projectId,
       name,
       summary,
-      links: [],
-      hasDocs: false,
+      links,
+      hasDocs,
       createdAt: new Date().toISOString(),
-      chats: [],
-      files: [],
+      chats: [sessionId],
+      files: initialFiles,
+      icon: '📁',
     };
-    set((s) => ({ projects: [...s.projects, project] }));
+
+    set((s) => ({
+      projects: [...s.projects, project],
+      chatSessions: [initialSession, ...s.chatSessions],
+      currentProjectId: projectId,
+      currentSessionId: sessionId,
+      activeView: 'workspace',
+    }));
+
+    await get()._persist();
+    return projectId;
+  },
+
+  setCurrentProject: (projectId) => {
+    if (!projectId) {
+      set({ currentProjectId: null });
+      get()._persist();
+      return;
+    }
+
+    const state = get();
+    // Find latest chat for this project, or create one
+    const existingSession = state.chatSessions.find((cs) => cs.projectId === projectId);
+    if (existingSession) {
+      set({
+        currentProjectId: projectId,
+        currentSessionId: existingSession.id,
+        activeView: 'workspace',
+      });
+    } else {
+      const sessionId = crypto.randomUUID();
+      const project = state.projects.find((p) => p.id === projectId);
+      const newSession: ChatSession = {
+        id: sessionId,
+        title: project ? `${project.name} — محادثة` : 'جلسة مشروع',
+        messages: [],
+        date: new Date().toISOString(),
+        projectId,
+        modelId: state.activeModel,
+      };
+      set((s) => ({
+        projects: s.projects.map((p) => (p.id === projectId ? { ...p, chats: [...p.chats, sessionId] } : p)),
+        chatSessions: [newSession, ...s.chatSessions],
+        currentProjectId: projectId,
+        currentSessionId: sessionId,
+        activeView: 'workspace',
+      }));
+    }
     get()._persist();
   },
 
@@ -1273,6 +1587,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       hiddenModelIds: state.hiddenModelIds,
       activityDates: state.activityDates,
       dailySuggestion: state.dailySuggestion,
+      customSkills: state.customSkills,
+      enabledSkillIds: state.enabledSkillIds,
     };
     await savePersistedState(toSave);
   },
@@ -1284,6 +1600,18 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       if (saved.activeModel === 'gemini-2.5-flash') {
         saved.activeModel = 'gemini-3.6-flash';
         saved.activeProviderId = 'gemini';
+      }
+      // Migration: chat modes were unified to exactly 4 (minister/coding/research/education)
+      // — stale persisted values (general/brainstorm/files) fall back to minister
+      if (!CHAT_MODES.some((m) => m.id === saved.chatMode)) {
+        saved.chatMode = 'minister' as ChatMode;
+      }
+      // Guarantee skill arrays exist
+      if (!saved.enabledSkillIds) {
+        saved.enabledSkillIds = DEFAULTS.enabledSkillIds;
+      }
+      if (!saved.customSkills) {
+        saved.customSkills = [];
       }
       set({ ...DEFAULTS, ...saved });
       if (typeof document !== 'undefined') {

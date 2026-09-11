@@ -13,6 +13,9 @@ dist/
 .DS_Store
 Thumbs.db
 .playwright-mcp/
+.trae/
+.trae/*
+!.trae/.gitkeep
 
 # TS incremental build
 *.tsbuildinfo

@@ -7,7 +7,7 @@
  * Replaces {TASKS_CONTEXT}, {MEMORY_CONTEXT}, {PROJECT_CONTEXT} placeholders.
  */
 
-import type { Task, Project, UserMemory } from '@/types';
+import type { Task, Project, UserMemory, CustomSkill } from '@/types';
 import { getRelevantMemories, formatMemoriesAsContext } from './MemoryEngine';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -52,6 +52,28 @@ function formatProjectContext(project: Project | null | undefined): string {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// SKILLS CONTEXT
+// ═══════════════════════════════════════════════════════════════════
+
+function formatSkillsContext(
+  customSkills: CustomSkill[] = [],
+  enabledSkillIds: string[] = [],
+): string {
+  const activeCustom = customSkills.filter(
+    (s) => s.enabled && (enabledSkillIds.length === 0 || enabledSkillIds.includes(s.id)),
+  );
+  if (activeCustom.length === 0) return '';
+
+  const skillDescriptions = activeCustom.map((s, idx) => {
+    const name = s.nameAr || s.nameEn || 'Skill';
+    const desc = s.descAr || s.descEn || '';
+    return `${idx + 1}. **${name}**: ${desc}\n   تعليمات التنفيذ: ${s.promptSnippet}`;
+  });
+
+  return `\n\n## المهارات المخصصة المفعلة (Custom Skills Active)\nالتزم بالتعليمات والقواعد التالية الخاصة بكل مهارة مفعلة أدناه أثناء صياغة ردودك:\n${skillDescriptions.join('\n')}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // MAIN BUILDER
 // ═══════════════════════════════════════════════════════════════════
 
@@ -65,6 +87,8 @@ function formatProjectContext(project: Project | null | undefined): string {
  * @param projects - All user projects.
  * @param currentProjectId - Currently active project ID.
  * @param userQuery - The user's current message (for memory relevance scoring).
+ * @param customSkills - User-created custom skills.
+ * @param enabledSkillIds - List of active skill IDs (built-in and custom).
  * @returns Complete system prompt ready for the LLM.
  */
 export async function buildContextualPrompt({
@@ -74,6 +98,8 @@ export async function buildContextualPrompt({
   projects,
   currentProjectId,
   userQuery,
+  customSkills = [],
+  enabledSkillIds = [],
 }: {
   basePrompt: string;
   modePrefix: string;
@@ -81,6 +107,8 @@ export async function buildContextualPrompt({
   projects: Project[];
   currentProjectId: string | null;
   userQuery: string;
+  customSkills?: CustomSkill[];
+  enabledSkillIds?: string[];
 }): Promise<string> {
   // 1. Build tasks context (synchronous — fast)
   const tasksContext = formatTasksContext(tasks);
@@ -107,9 +135,16 @@ export async function buildContextualPrompt({
     .replace('{PROJECT_CONTEXT}', projectContext);
 
   // 5. Append mode prefix if any (minister mode has empty prefix)
-  const finalPrompt = modePrefix
+  let finalPrompt = modePrefix
     ? `${contextualPrompt}\n\n## وضع خاص\n${modePrefix}`
     : contextualPrompt;
 
+  // 6. Append enabled custom skills instructions
+  const skillsContext = formatSkillsContext(customSkills, enabledSkillIds);
+  if (skillsContext) {
+    finalPrompt += skillsContext;
+  }
+
   return finalPrompt;
 }
+

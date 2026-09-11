@@ -2,13 +2,12 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Plus, Trash2, Check, Edit3, X,
   Bot, Mic, MicOff, Send, Layers,
-  FileUp, FileDown, Sparkles, Flame, Crown, RefreshCw, Zap, Terminal,
+  FileUp, FileDown, Sparkles, Flame, Crown, RefreshCw, Terminal,
   FolderKanban, ListTodo, Users, BarChart3, Code2, PenLine,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkspaceStore } from '@/store/workspaceStore';
 import { useSwarmStore } from '@/store/swarmStore';
-import { useEventLogger } from '@/hooks/useEventLogger';
 import { APP_NAME_AR, QUICK_ACTIONS } from '@/constants';
 import { isSTTSupported, startListening, stopListening } from '@/services/voice/VoiceService';
 import { importTasks as parseImportTasks } from '@/lib/importers';
@@ -82,8 +81,6 @@ export default function HomeView() {
   const importFileRef = useRef<HTMLInputElement>(null);
   const tasksExportRef = useRef<HTMLDivElement>(null);
 
-  const log = useEventLogger((s) => s);
-  const metrics = useMemo(() => log.getMetrics(), [log.events.length]);
   const incompleteTasks = tasks.filter((t) => !t.completed);
 
   // ── Daily completion ──
@@ -205,38 +202,10 @@ export default function HomeView() {
       {/* ═══════════════════════════════════════════════════════════
           SECTION 1 — HERO في برواز: العين + الشات + الفلاتر
       ════════════════════════════════════════════════════════════ */}
-      <section className="min-h-[calc(100dvh-150px)] flex flex-col items-center justify-center gap-3 px-4 pt-[5px] pb-3 relative">
-
-        {/* 📊 شريط المهام + العمليات — في الهوا (من غير خلفية) محاذي لحواف البرواز */}
-        <div className="relative z-10 w-full max-w-4xl flex items-center justify-between px-1">
-          {/* Insight metrics — أقصى الشمال */}
-          <div className="flex items-center gap-4">
-            <span className="text-[10px] font-mono text-[var(--accent-400)] flex items-center gap-1">
-              <Zap size={11} /> {isRtl ? 'عمليات:' : 'Ops:'} <b>{metrics.totalOperations}</b>
-            </span>
-            <span className="text-[10px] font-mono text-[var(--accent-300)] flex items-center gap-1">
-              <BarChart3 size={11} /> {isRtl ? 'توكنز:' : 'Tokens:'} <b>{metrics.totalTokens.toLocaleString()}</b>
-            </span>
-            <span className="text-[10px] font-mono text-purple-300 flex items-center gap-1">
-              🧠 {isRtl ? 'أخطاء:' : 'Errors:'} <b>{metrics.totalErrors}</b>
-            </span>
-          </div>
-          {/* زر التاسكات — أقصى اليمين + Accent */}
-          <button
-            onClick={() => setShowTasks(true)}
-            className="text-[10px] font-mono flex items-center gap-1 px-3 py-1.5 rounded-full bg-[var(--accent-400)] text-black font-bold hover:brightness-110 hover:scale-105 transition-all cursor-pointer shadow-[0_0_14px_var(--accent-glow)]"
-            title={isRtl ? 'فتح لوحة المهام' : 'Open Tasks HUD'}
-          >
-            <ListTodo size={11} />
-            {isRtl ? 'المهام' : 'Tasks'}
-            {incompleteTasks.length > 0 && (
-              <span className="px-1.5 rounded-full bg-black/25 text-white text-[9px]">{incompleteTasks.length}</span>
-            )}
-          </button>
-        </div>
+      <section className="min-h-[calc(100dvh-150px)] flex flex-col items-center justify-center gap-3 px-2 sm:px-4 pt-[5px] pb-3 relative">
 
         {/* 🖼️ برواز منصة الأوامر — زي الشكل القديم (كورنر + ليبل + دوتس) */}
-        <div className="relative w-full max-w-4xl glass rounded-2xl border border-white/10 p-5 md:p-8 flex flex-col items-center justify-center gap-5 min-h-[calc(100dvh-300px)] shadow-2xl overflow-hidden">
+        <div className="relative w-full max-w-4xl glass rounded-2xl border border-white/10 p-3 sm:p-6 md:p-8 flex flex-col items-center justify-center gap-4 sm:gap-5 min-h-[calc(100dvh-300px)] shadow-2xl overflow-hidden">
           {/* Cyber grid خفيف جوه البرواز */}
           <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.015)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.015)_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
 
@@ -246,56 +215,104 @@ export default function HomeView() {
           <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-[var(--accent-400)]/40 rounded-bl-sm pointer-events-none" />
           <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-[var(--accent-400)]/40 rounded-br-sm pointer-events-none" />
 
-          {/* ليبل البرواز + دوتس */}
-          <div className="absolute top-3.5 left-4 flex items-center gap-2 text-[10px] md:text-xs text-[var(--text-dim)] font-mono tracking-wide pointer-events-none">
-            <Terminal size={13} className="text-[var(--accent-400)] animate-pulse" />
-            <span>{isRtl ? 'منصة الأوامر العصبية' : 'COMMAND CONSOLE'}</span>
-          </div>
-          <div className="absolute top-3.5 right-4 flex gap-1.5 pointer-events-none">
-            <span className="w-2.5 h-2.5 rounded-full bg-red-500/70" />
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-500/70" />
-            <span className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
+          {/* ليبل البرواز + زر المهام + دوتس — صف واحد inline */}
+          <div className="absolute top-1.5 left-3 sm:left-4 right-3 sm:right-4 flex items-center justify-between z-10" dir={isRtl ? 'rtl' : 'ltr'}>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowTasks(true)}
+                className="flex items-center gap-1.5 px-2 py-0.5 border-b border-[var(--accent-400)]/40 text-[var(--accent-400)] hover:text-[var(--accent-300)] hover:border-[var(--accent-300)] transition-colors cursor-pointer font-mono text-[11px] bg-transparent"
+                title={isRtl ? 'فتح قائمة المهام' : 'Open Task List'}
+              >
+                <ListTodo size={12} className="opacity-80" />
+                <span className="font-bold underline underline-offset-2 decoration-[var(--accent-400)]/40">{isRtl ? 'قائمة المهام' : 'Task List'}</span>
+                {incompleteTasks.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-[var(--accent-400)] text-black font-bold text-[9px] no-underline">
+                    {incompleteTasks.length}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1.5 pointer-events-none">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500/70" />
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500/70" />
+                <span className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
+              </div>
+            </div>
           </div>
 
-          {/* 👁️ العين — نظيفة من غير خلفيات أو دوائر */}
-          <img
-            src="/home-hero.png"
-            alt="𓂀"
-            draggable={false}
-            className="w-32 h-32 md:w-40 md:h-40 rounded-full object-cover select-none pointer-events-none relative z-10 mt-4"
-          />
+          {/* 𓂀 اللوجو الذهبي — متوسطن بدقة بهالة ملكية هادية */}
+          <div className="relative flex items-center justify-center mt-5 mb-1 z-10">
+            <div className="absolute w-36 h-36 md:w-52 md:h-52 rounded-full bg-gradient-to-tr from-[var(--accent-500)]/15 via-amber-500/20 to-transparent blur-2xl pointer-events-none" />
+            <div className="absolute w-24 h-24 md:w-32 md:h-32 rounded-full bg-amber-500/15 blur-xl animate-pulse pointer-events-none" />
+            <img
+              src="/home-hero.png"
+              alt="𓂀 WAZEER OS"
+              draggable={false}
+              className="relative w-24 h-24 sm:w-28 sm:h-28 md:w-36 md:h-36 rounded-full object-cover select-none pointer-events-none drop-shadow-[0_0_30px_rgba(251,191,36,0.35)]"
+            />
+          </div>
 
-          {/* العنوان — مرفوع بعيد عن مايك الشات بوكس */}
-          <div className="text-center relative z-10 -mt-1 mb-5">
+          {/* العنوان */}
+          <div className="text-center relative z-10 -mt-1 mb-2">
             <h1 className="text-xl md:text-2xl font-bold font-[var(--font-display)] text-[var(--text-primary)]">
               {isRtl ? 'ابدأ مهمة جديدة' : 'Start a New Mission'} <Sparkles size={17} className="inline text-[var(--accent-400)] -mt-1" />
             </h1>
-            <p className="text-xs text-[var(--text-muted)] mt-1.5">
+            <p className="text-xs text-[var(--text-muted)] mt-1">
               {isRtl ? 'صف ما تريد إنجازه، وسيتولى وزير التنفيذ.' : 'Describe what you want done — the Minister handles execution.'}
             </p>
           </div>
 
-          {/* صندوق الشات — ستايل قديم: المايك في نص البوكس + سويتش وزير 3D */}
-          <div className="relative z-10 max-w-2xl mx-auto w-full">
+          {/* الفلاتر — 3 إجراءات سريعة (قبل صندوق الشات) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 relative z-10 max-w-2xl mx-auto w-full">
+            {QUICK_ACTIONS.map((qa) => {
+              const Icon = QUICK_ACTION_ICONS[qa.id as keyof typeof QUICK_ACTION_ICONS] ?? Sparkles;
+              return (
+                <button
+                  key={qa.id}
+                  onClick={() => handleSendPrompt(isRtl ? qa.promptAr : qa.promptEn)}
+                  disabled={isGenerating}
+                  className="glass rounded-xl p-2.5 sm:p-3 text-start hover:border-[var(--accent-400)]/50 hover:bg-[var(--accent-500)]/5 transition-all cursor-pointer group disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <Icon
+                      size={15}
+                      className="text-[var(--accent-400)] shrink-0 transition-transform duration-300 group-hover:scale-125 group-hover:-rotate-12 drop-shadow-[0_0_6px_var(--accent-glow)]"
+                    />
+                    <span className="text-xs font-bold text-[var(--text-primary)] group-hover:text-[var(--accent-300)] transition-colors">
+                      {isRtl ? qa.titleAr : qa.titleEn}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-[var(--text-dim)] leading-snug">
+                    {isRtl ? qa.descAr : qa.descEn}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* صندوق الشات — في آخر الهيرو تحت مع محاذاة متناسقة للأيقونات */}
+          <div className="relative z-10 max-w-2xl mx-auto w-full mt-2">
             <div className="relative rounded-2xl glass border border-[var(--accent-400)]/35 p-2 pt-3 shadow-[0_0_28px_var(--accent-glow)] focus-within:border-[var(--accent-400)] transition-all">
 
-              {/* المايك — دائرة في نص البوكس من فوق (زي القديم بالظبط) */}
-              <div className="flex justify-center -mt-8 mb-1">
+              {/* المايك — دائرة في نص البوكس من فوق */}
+              <div className="flex justify-center -mt-7 mb-1">
                 <button
                   onClick={handleVoiceToggle}
-                  className={`w-12 h-12 rounded-full flex items-center justify-center shadow-xl transition-all cursor-pointer border-4 border-[#0d0d12] ${
+                  className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center shadow-xl transition-all cursor-pointer border-4 border-[#0d0d12] ${
                     isRecording
                       ? 'bg-red-500 text-white animate-bounce shadow-[0_0_25px_rgba(239,68,68,0.7)]'
                       : 'bg-[var(--accent-400)] text-black hover:scale-105 shadow-[0_0_20px_var(--accent-glow)]'
                   }`}
                   title={isRecording ? (isRtl ? 'إيقاف التسجيل' : 'Stop Recording') : (isRtl ? 'تحدث مع أمون بالصوت' : 'Speak with Amoun')}
                 >
-                  {isRecording ? <MicOff size={19} /> : <Mic size={19} />}
+                  {isRecording ? <MicOff size={18} /> : <Mic size={18} />}
                 </button>
               </div>
 
-              {/* صف الإدخال — الارسال نزل لصف وزير */}
-              <div className="flex items-center px-2">
+              {/* صف الإدخال */}
+              <div className="flex items-center px-1.5 sm:px-2">
                 <input
                   type="text"
                   value={inputText}
@@ -305,106 +322,79 @@ export default function HomeView() {
                     ? (isRtl ? '🎙️ جاري الاستماع إلى صوتك...' : '🎙️ Listening to your voice...')
                     : (isRtl ? 'اضغط على علامة المايك وقول كل اللي في نفسك 😉' : 'Click mic or type what you need...')}
                   dir="auto"
-                  className="flex-1 bg-transparent text-sm text-center text-[var(--text-primary)] placeholder:text-[var(--text-dim)] outline-none py-1.5 px-2"
+                  className="flex-1 bg-transparent text-xs sm:text-sm text-center text-[var(--text-primary)] placeholder:text-[var(--text-dim)] outline-none py-1.5 px-1 sm:px-2"
                 />
               </div>
 
-              {/* صف الأوضاع: سويتش وزير 3D + شرائح الأوضاع المتقدمة */}
-              <div className="flex flex-wrap items-center gap-2 px-2 pt-2 pb-1 border-t border-white/5 mt-1.5">
-                <button
-                  onClick={() => setChatMode(isMinisterMode ? 'coding' : 'minister')}
-                  className="relative flex items-center h-8 rounded-full px-1 transition-all duration-300 cursor-pointer shrink-0"
-                  style={{
-                    width: 96,
-                    background: isMinisterMode
-                      ? 'linear-gradient(145deg, var(--accent-500), var(--accent-600))'
-                      : 'linear-gradient(145deg, #2b2b36, #17171f)',
-                    boxShadow: isMinisterMode
-                      ? 'inset 0 2px 5px rgba(0,0,0,0.35), 0 0 16px var(--accent-glow)'
-                      : 'inset 0 2px 6px rgba(0,0,0,0.65)',
-                  }}
-                  title={isRtl ? 'وضع الوزير الصامت — يسمع ويفلتر ويسجل ويتابع' : 'Silent Minister mode — listens, filters, records, follows up'}
-                  role="switch"
-                  aria-checked={isMinisterMode}
-                >
-                  <span
-                    className="absolute top-1 w-6 h-6 rounded-full transition-all duration-300"
+              {/* صف الأوضاع: سويتش وزير 3D + شرائح الأوضاع المتقدمة + زر الإرسال متناسق */}
+              <div className="flex items-center justify-between gap-1.5 sm:gap-2 px-1.5 sm:px-2 pt-2 pb-1 border-t border-white/5 mt-1">
+                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                  <button
+                    onClick={() => setChatMode(isMinisterMode ? 'coding' : 'minister')}
+                    className="relative flex items-center h-7 sm:h-8 rounded-full px-1 transition-all duration-300 cursor-pointer shrink-0"
                     style={{
-                      [isRtl ? 'right' : 'left']: isMinisterMode ? '4px' : '62px',
+                      width: 86,
                       background: isMinisterMode
-                        ? 'linear-gradient(145deg, #ffffff, #b8c4cf)'
-                        : 'linear-gradient(145deg, #8a8a96, #3d3d48)',
-                      boxShadow: '0 3px 6px rgba(0,0,0,0.55), inset 0 -2px 3px rgba(0,0,0,0.2), inset 0 1px 2px rgba(255,255,255,0.6)',
+                        ? 'linear-gradient(145deg, var(--accent-500), var(--accent-600))'
+                        : 'linear-gradient(145deg, #2b2b36, #17171f)',
+                      boxShadow: isMinisterMode
+                        ? 'inset 0 2px 5px rgba(0,0,0,0.35), 0 0 16px var(--accent-glow)'
+                        : 'inset 0 2px 6px rgba(0,0,0,0.65)',
                     }}
-                  />
-                  <span className={`w-full text-center text-[10px] font-bold font-mono transition-colors ${isMinisterMode ? 'text-black/80' : 'text-[var(--text-dim)]'}`}>
-                    {isRtl ? 'وزير 👑' : 'MINISTER 👑'}
-                  </span>
-                </button>
+                    title={isRtl ? 'وضع الوزير الصامت — يسمع ويفلتر ويسجل ويتابع' : 'Silent Minister mode — listens, filters, records, follows up'}
+                    role="switch"
+                    aria-checked={isMinisterMode}
+                  >
+                    <span
+                      className="absolute top-0.5 sm:top-1 w-5 h-5 sm:w-6 sm:h-6 rounded-full transition-all duration-300"
+                      style={{
+                        [isRtl ? 'right' : 'left']: isMinisterMode ? '3px' : '56px',
+                        background: isMinisterMode
+                          ? 'linear-gradient(145deg, #ffffff, #b8c4cf)'
+                          : 'linear-gradient(145deg, #8a8a96, #3d3d48)',
+                        boxShadow: '0 3px 6px rgba(0,0,0,0.55), inset 0 -2px 3px rgba(0,0,0,0.2), inset 0 1px 2px rgba(255,255,255,0.6)',
+                      }}
+                    />
+                    <span className={`w-full text-center text-[9px] sm:text-[10px] font-bold font-mono transition-colors ${isMinisterMode ? 'text-black/80' : 'text-[var(--text-dim)]'}`}>
+                      {isRtl ? 'وزير 👑' : 'MINISTER 👑'}
+                    </span>
+                  </button>
 
-                {!isMinisterMode && (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {ADVANCED_MODES.map((m) => (
-                      <button
-                        key={m.id}
-                        onClick={() => setChatMode(m.id)}
-                        className={`text-[10px] px-2.5 py-1 rounded-full border transition-colors cursor-pointer ${
-                          chatMode === m.id
-                            ? 'bg-[var(--accent-500)]/20 border-[var(--accent-400)]/50 text-[var(--accent-300)]'
-                            : 'border-white/10 text-[var(--text-dim)] hover:border-[var(--accent-400)]/30 hover:text-[var(--text-secondary)]'
-                        }`}
-                      >
-                        {m.icon} {isRtl ? m.labelAr : m.labelEn}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {isMinisterMode && (
-                  <span className="text-[9px] text-[var(--text-dim)] font-mono truncate">
-                    {isRtl ? '· يسمع ← يفلتر ← يسجل ← يتابع' : '· listens → filters → records → follows up'}
-                  </span>
-                )}
+                  {!isMinisterMode && (
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {ADVANCED_MODES.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => setChatMode(m.id)}
+                          className={`text-[9px] sm:text-[10px] px-2 py-0.5 sm:py-1 rounded-full border transition-colors cursor-pointer ${
+                            chatMode === m.id
+                              ? 'bg-[var(--accent-500)]/20 border-[var(--accent-400)]/50 text-[var(--accent-300)]'
+                              : 'border-white/10 text-[var(--text-dim)] hover:border-[var(--accent-400)]/30 hover:text-[var(--text-secondary)]'
+                          }`}
+                        >
+                          {m.icon} {isRtl ? m.labelAr : m.labelEn}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {isMinisterMode && (
+                    <span className="hidden xs:inline text-[9px] text-[var(--text-dim)] font-mono truncate">
+                      {isRtl ? '· يسمع ← يفلتر ← يسجل' : '· listens → filters'}
+                    </span>
+                  )}
+                </div>
 
-                {/* الإرسال — نفس صف وزير */}
+                {/* الإرسال — في نفس الصف متناسق ومحمي من الانزلاق */}
                 <button
                   onClick={() => { handleSendPrompt(inputText); setInputText(''); }}
                   disabled={!inputText.trim() || isGenerating}
-                  className="ms-auto p-2 rounded-xl bg-[var(--accent-400)] text-black disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-90 transition-opacity cursor-pointer shadow-md shrink-0"
+                  className="p-2 rounded-xl bg-[var(--accent-400)] text-black disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-90 transition-opacity cursor-pointer shadow-md shrink-0"
                   title={isRtl ? 'إرسال' : 'Send'}
                 >
-                  <Send size={15} className={isRtl ? '-scale-x-100' : ''} />
+                  <Send size={14} className={isRtl ? '-scale-x-100' : ''} />
                 </button>
               </div>
             </div>
-          </div>
-
-          {/* الفلاتر — 3 إجراءات سريعة */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 relative z-10 max-w-2xl mx-auto w-full">
-            {QUICK_ACTIONS.map((qa) => {
-              const Icon = QUICK_ACTION_ICONS[qa.id as keyof typeof QUICK_ACTION_ICONS] ?? Sparkles;
-              return (
-                <button
-                  key={qa.id}
-                  onClick={() => handleSendPrompt(isRtl ? qa.promptAr : qa.promptEn)}
-                  disabled={isGenerating}
-                className="glass rounded-xl p-3 text-start hover:border-[var(--accent-400)]/50 hover:bg-[var(--accent-500)]/5 transition-all cursor-pointer group disabled:opacity-50"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  {/* الأيقونة يمين + أنيميشن */}
-                  <Icon
-                    size={16}
-                    className="text-[var(--accent-400)] shrink-0 transition-transform duration-300 group-hover:scale-125 group-hover:-rotate-12 drop-shadow-[0_0_6px_var(--accent-glow)]"
-                  />
-                  <span className="text-xs font-bold text-[var(--text-primary)] group-hover:text-[var(--accent-300)] transition-colors">
-                    {isRtl ? qa.titleAr : qa.titleEn}
-                  </span>
-                </div>
-                <p className="text-[10px] text-[var(--text-dim)] leading-snug">
-                  {isRtl ? qa.descAr : qa.descEn}
-                </p>
-              </button>
-              );
-            })}
           </div>
         </div>
       </section>

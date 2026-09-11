@@ -47,9 +47,13 @@ export function useBanGuard(): { isBanned: boolean; banReason: string; loading: 
           // Also check if it's expired and not permanent
           const now = new Date();
           const bannedAt = new Date(banned.timestamp);
+          const durationMs = banned.reason?.includes('1h') || banned.reason?.includes('ساعة')
+            ? 1 * 60 * 60 * 1000
+            : 24 * 60 * 60 * 1000;
+
           const isExpired =
             !banned.permanent &&
-            (now.getTime() - bannedAt.getTime()) > 24 * 60 * 60 * 1000;
+            (now.getTime() - bannedAt.getTime()) > durationMs;
 
           if (!isExpired && !cancelled) {
             setIsBanned(true);

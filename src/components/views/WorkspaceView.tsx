@@ -1,11 +1,19 @@
 import { useRef, useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Bot, User, Copy, Check, Trash2, RotateCcw, Edit2, X, Send, ListChecks, Volume2, VolumeX } from 'lucide-react';
+import {
+  Bot, User, Copy, Check, Trash2, RotateCcw, Edit2, X, Send, ListChecks,
+  Volume2, VolumeX, Settings, KeyRound, FolderOpen, Terminal, ChevronDown, ChevronUp, FileText,
+  FileCode, ExternalLink, MoreVertical, Star, Pencil, CalendarClock, FolderPlus,
+  SlidersHorizontal,
+} from 'lucide-react';
 import { useWorkspaceStore } from '@/store/workspaceStore';
+import { wazeerDB } from '@/lib/db';
 import ChatInput from '@/components/ChatInput';
 import { speak, stopSpeaking, getIsSpeaking, isTTSSupported } from '@/services/voice/VoiceService';
-import type { ChatMessage } from '@/types';
+import LiveProcessBadge from '@/components/workspace/LiveProcessBadge';
+import InteractiveSelectionCard from '@/components/workspace/InteractiveSelectionCard';
+import type { ChatMessage, SessionEvent, Artifact } from '@/types';
 
 export default function WorkspaceView() {
   const {
@@ -20,6 +28,16 @@ export default function WorkspaceView() {
     editMessage,
     retryMessage,
     tasks,
+    addTask,
+    projects,
+    currentProjectId,
+    setCurrentProject,
+    setSelectedArtifactId,
+    toggleArtifactPanel,
+    isArtifactPanelOpen,
+    renameSession,
+    deleteSession,
+    toggleFavoriteSession,
   } = useWorkspaceStore();
 
   const isRtl = currentLanguage === 'ar';
@@ -33,6 +51,53 @@ export default function WorkspaceView() {
 
   const session = chatSessions.find((s) => s.id === currentSessionId);
   const messages = session?.messages ?? [];
+  const activeProject = projects.find((p) => p.id === (currentProjectId || session?.projectId));
+
+  // Extract all uploaded attachments from messages in current session
+  const uploadedFiles = messages.flatMap((m) => m.attachments ?? []);
+
+  // CLI / Background Logs State & Project Artifacts
+  const [showCliPanel, setShowCliPanel] = useState(false);
+  const [showFilesPanel, setShowFilesPanel] = useState(false);
+  const [sessionLogs, setSessionLogs] = useState<SessionEvent[]>([]);
+  const [projectArtifacts, setProjectArtifacts] = useState<Artifact[]>([]);
+
+  // Manus Mini-Menu & Dialogs State
+  const [miniMenuOpen, setMiniMenuOpen] = useState(false);
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [sessionTitleInput, setSessionTitleInput] = useState('');
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [scheduleTaskInput, setScheduleTaskInput] = useState('');
+  const [showPreferencesCard, setShowPreferencesCard] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMiniMenuOpen(false);
+      }
+    };
+    if (miniMenuOpen) document.addEventListener('pointerdown', handleOutside);
+    return () => document.removeEventListener('pointerdown', handleOutside);
+  }, [miniMenuOpen]);
+
+  useEffect(() => {
+    if (currentSessionId) {
+      wazeerDB.getByIndex<SessionEvent>('session_events', 'sessionId', currentSessionId)
+        .then((evs) => setSessionLogs(evs.sort((a, b) => (b.id ?? 0) - (a.id ?? 0))))
+        .catch(() => setSessionLogs([]));
+    }
+  }, [currentSessionId, messages.length]);
+
+  useEffect(() => {
+    wazeerDB.getAll<Artifact>('artifacts')
+      .then((all) => {
+        const targetProjId = currentProjectId || session?.projectId;
+        const matched = all.filter((a) => (targetProjId && a.projectId === targetProjId) || a.chatId === currentSessionId);
+        setProjectArtifacts(matched);
+      })
+      .catch(() => setProjectArtifacts([]));
+  }, [currentProjectId, currentSessionId, session?.projectId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -79,31 +144,301 @@ export default function WorkspaceView() {
   // Count tasks extracted in this session (simple approach)
   const sessionTasks = tasks.filter(t => t.sourceSessionId === currentSessionId);
 
+  const openArtifact = (artifactId: string) => {
+    setSelectedArtifactId(artifactId);
+    if (!isArtifactPanelOpen) {
+      toggleArtifactPanel();
+    }
+  };
+
   return (
-    <div className="h-full flex flex-col">
-      {/* Task extraction interactive banner */}
-      {sessionTasks.length > 0 && (
-        <div className="shrink-0 mx-4 mt-3 px-3 py-2.5 rounded-xl bg-[var(--accent-400)]/15 border border-[var(--accent-400)]/30 flex items-center justify-between gap-2 text-xs shadow-lg backdrop-blur-md">
-          <div className="flex items-center gap-2">
-            <ListChecks size={16} className="text-[var(--accent-400)] shrink-0" />
-            <span className="text-[var(--text-primary)] font-medium">
-              {isRtl
-                ? `تم استخراج ${sessionTasks.length} مهمة من هذه المحادثة`
-                : `${sessionTasks.length} task(s) extracted from this conversation`
-              }
-            </span>
-          </div>
+    <div className="h-full flex flex-col relative overflow-hidden">
+      {/* HUD Top Actions: الملفات المرفوعة + شاشة الـ CLI الخلفية + مؤشر المشروع النشط */}
+      <div className="shrink-0 px-4 py-2 border-b border-[var(--border)] bg-black/20 flex items-center justify-between gap-2 text-xs flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Active Project Pill */}
+          {activeProject && (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[var(--accent-400)]/15 border border-[var(--accent-400)]/40 text-[var(--accent-300)] font-mono text-[11px] shadow-sm">
+              <span>📁 {activeProject.name}</span>
+              <button
+                onClick={() => setCurrentProject(null)}
+                className="hover:text-red-400 ms-1 text-zinc-400 text-xs cursor-pointer"
+                title={isRtl ? 'مغادرة بيئة المشروع' : 'Leave Project Environment'}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* Files Root Trigger (2) */}
           <button
-            onClick={() => useWorkspaceStore.getState().setActiveView('home')}
-            className="px-2.5 py-1 rounded-lg bg-[var(--accent-400)] text-black font-bold text-[11px] hover:opacity-90 transition-opacity cursor-pointer flex items-center gap-1 shadow-sm shrink-0"
+            onClick={() => setShowFilesPanel((v) => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border transition-all cursor-pointer ${
+              showFilesPanel
+                ? 'bg-[var(--accent-400)]/20 border-[var(--accent-400)]/50 text-[var(--accent-300)]'
+                : 'bg-white/5 border-white/10 text-[var(--text-secondary)] hover:border-white/20'
+            }`}
+            title={isRtl ? 'عرض روت الملفات ووثائق الـ SDD' : 'View Files & SDD Docs'}
           >
-            <span>{isRtl ? 'عرض المهام' : 'View Tasks'}</span>
+            <FolderOpen size={13} className="text-[var(--accent-400)]" />
+            <span>{isRtl ? 'الملفات والوثائق' : 'Files & Docs'}</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-white/10 font-mono text-[10px]">
+              {uploadedFiles.length + projectArtifacts.length}
+            </span>
           </button>
+
+          {/* CLI / Terminal Trigger (4) */}
+          <button
+            onClick={() => setShowCliPanel((v) => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border transition-all cursor-pointer ${
+              showCliPanel
+                ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                : 'bg-white/5 border-white/10 text-[var(--text-secondary)] hover:border-white/20'
+            }`}
+            title={isRtl ? 'عرض شاشة الأوامر والعمليات الخلفية CLI' : 'Open CLI / Background Console'}
+          >
+            <Terminal size={13} className="text-amber-400" />
+            <span className="font-mono text-[11px]">{isRtl ? 'سجل العمليات CLI' : 'CLI Monitor'}</span>
+            {sessionLogs.length > 0 && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            )}
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 ms-auto">
+          {/* Task counter quick link */}
+          {sessionTasks.length > 0 && (
+            <button
+              onClick={() => useWorkspaceStore.getState().setActiveView('home')}
+              className="flex items-center gap-1 text-[11px] text-[var(--accent-300)] hover:underline cursor-pointer"
+            >
+              <ListChecks size={13} />
+              <span className="hidden sm:inline">{isRtl ? `${sessionTasks.length} مهمة مستخرجة` : `${sessionTasks.length} tasks`}</span>
+              <span className="sm:hidden">{sessionTasks.length}</span>
+            </button>
+          )}
+
+          {/* Questionnaire / Preferences toggle button */}
+          <button
+            onClick={() => setShowPreferencesCard((v) => !v)}
+            className={`px-2 py-1 rounded-lg border text-xs transition-colors cursor-pointer flex items-center gap-1 ${
+              showPreferencesCard
+                ? 'bg-[var(--accent-400)]/20 border-[var(--accent-400)]/40 text-[var(--accent-300)]'
+                : 'bg-white/5 border-white/10 text-[var(--text-secondary)] hover:text-white'
+            }`}
+            title={isRtl ? 'استبيان تفضيلات التوليد' : 'Generation Preferences'}
+          >
+            <SlidersHorizontal size={13} className="text-[var(--accent-400)]" />
+            <span className="hidden sm:inline">{isRtl ? 'تفضيلات' : 'Preferences'}</span>
+          </button>
+
+          {/* Manus 1.6 Style Mini Menu (...) */}
+          {session && (
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setMiniMenuOpen((v) => !v)}
+                className={`p-1.5 rounded-lg border text-xs transition-colors cursor-pointer flex items-center gap-1 ${
+                  miniMenuOpen
+                    ? 'bg-white/15 border-white/30 text-white'
+                    : 'bg-white/5 border-white/10 text-[var(--text-secondary)] hover:text-white hover:border-white/20'
+                }`}
+                title={isRtl ? 'خيارات المحادثة والمشروع' : 'Chat & Project Options'}
+                aria-label="Chat Options"
+              >
+                {session.isFavorite && <Star size={12} className="text-amber-400 fill-amber-400 shrink-0" />}
+                <MoreVertical size={14} />
+              </button>
+
+              {miniMenuOpen && (
+                <div
+                  className="absolute top-full end-0 mt-1.5 w-52 glass glow-lg rounded-xl p-1.5 border border-white/15 z-50 shadow-2xl space-y-0.5 text-xs text-start bg-[#0d0d12]/95 backdrop-blur-xl"
+                  dir={isRtl ? 'rtl' : 'ltr'}
+                >
+                  <button
+                    onClick={() => {
+                      toggleFavoriteSession(session.id);
+                      setMiniMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-white/10 text-[var(--text-primary)] transition-colors cursor-pointer"
+                  >
+                    <Star size={14} className={session.isFavorite ? 'text-amber-400 fill-amber-400' : 'text-[var(--text-dim)]'} />
+                    <span>{session.isFavorite ? (isRtl ? 'إزالة من المفضلة' : 'Unfavorite') : (isRtl ? 'إضافة للمفضلة' : 'Favorite')}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setSessionTitleInput(session.title);
+                      setRenameDialogOpen(true);
+                      setMiniMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-white/10 text-[var(--text-primary)] transition-colors cursor-pointer"
+                  >
+                    <Pencil size={14} className="text-[var(--text-dim)]" />
+                    <span>{isRtl ? 'إعادة التسمية' : 'Rename'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowFilesPanel(true);
+                      setMiniMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-white/10 text-[var(--text-primary)] transition-colors cursor-pointer"
+                  >
+                    <FolderOpen size={14} className="text-[var(--text-dim)]" />
+                    <span>{isRtl ? 'عرض كل الملفات' : 'View all files'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setScheduleTaskInput(session.title);
+                      setScheduleDialogOpen(true);
+                      setMiniMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-white/10 text-[var(--text-primary)] transition-colors cursor-pointer"
+                  >
+                    <CalendarClock size={14} className="text-[var(--text-dim)]" />
+                    <span>{isRtl ? 'جدولة مهمة' : 'Schedule a task'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      if (projects.length > 0) {
+                        setCurrentProject(projects[0].id);
+                      }
+                      setMiniMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-white/10 text-[var(--text-primary)] transition-colors cursor-pointer"
+                  >
+                    <FolderPlus size={14} className="text-[var(--text-dim)]" />
+                    <span>{isRtl ? 'إضافة إلى مشروع' : 'Add to project'}</span>
+                  </button>
+
+                  <div className="border-t border-white/10 my-1" />
+
+                  <button
+                    onClick={() => {
+                      if (confirm(isRtl ? 'هل تريد حذف هذه المحادثة بالتأكيد؟' : 'Delete this chat?')) {
+                        deleteSession(session.id);
+                      }
+                      setMiniMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-red-500/15 text-red-400 transition-colors cursor-pointer font-medium"
+                  >
+                    <Trash2 size={14} />
+                    <span>{isRtl ? 'حذف' : 'Delete'}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Drawer Panel: Uploaded Files & SDD Docs (2) */}
+      {showFilesPanel && (
+        <div className="shrink-0 p-3 bg-black/40 border-b border-[var(--border)] glass animate-in slide-in-from-top-2 duration-200 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-[var(--accent-400)] flex items-center gap-1.5">
+              <FolderOpen size={14} />
+              {isRtl ? 'ملفات ووثائق الجلسة والمشروع' : 'Files & Architecture Artifacts'}
+            </span>
+            <button onClick={() => setShowFilesPanel(false)} className="text-[var(--text-dim)] hover:text-white cursor-pointer">
+              <X size={14} />
+            </button>
+          </div>
+
+          {uploadedFiles.length === 0 && projectArtifacts.length === 0 ? (
+            <p className="text-xs text-[var(--text-dim)] text-center py-3">
+              {isRtl ? 'لا توجد ملفات أو وثائق مرفوعة بعد.' : 'No files or documents created yet.'}
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+              {/* Project SDD Docs */}
+              {projectArtifacts.map((art) => (
+                <div
+                  key={art.id}
+                  onClick={() => openArtifact(art.id)}
+                  className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[var(--accent-400)]/10 border border-[var(--accent-400)]/30 text-xs hover:bg-[var(--accent-400)]/20 transition-colors cursor-pointer group"
+                  title={isRtl ? 'فتح في لوحة البرديات' : 'Open in Artifact Panel'}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FileCode size={14} className="text-[var(--accent-400)] shrink-0" />
+                    <div className="min-w-0">
+                      <p className="truncate text-zinc-100 font-bold">{art.title}</p>
+                      <p className="text-[10px] text-[var(--accent-300)] font-mono">{(art.content.length / 1024).toFixed(1)} KB (SDD Doc)</p>
+                    </div>
+                  </div>
+                  <ExternalLink size={12} className="text-zinc-400 group-hover:text-white shrink-0" />
+                </div>
+              ))}
+
+              {/* Uploaded Attachments */}
+              {uploadedFiles.map((file, i) => (
+                <div key={file.id || i} className="flex items-center gap-2 p-2 rounded-lg bg-white/5 border border-white/10 text-xs">
+                  <FileText size={14} className="text-[var(--accent-400)] shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate text-[var(--text-primary)] font-medium">{file.name}</p>
+                    <p className="text-[10px] text-[var(--text-dim)] font-mono">{(file.size / 1024).toFixed(1)} KB</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Drawer Panel: CLI Monitor Terminal (4) */}
+      {showCliPanel && (
+        <div className="shrink-0 p-3 bg-[#08080d]/95 border-b border-[var(--border)] font-mono text-xs max-h-56 overflow-y-auto custom-scrollbar shadow-2xl animate-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-white/10 text-[11px] text-[var(--text-dim)]">
+            <span className="flex items-center gap-1.5 text-amber-400 font-bold">
+              <Terminal size={13} />
+              {isRtl ? 'شاشة الأوامر والعمليات الحية (CLI)' : 'BACKGROUND PROCESSES MONITOR'}
+            </span>
+            <button onClick={() => setShowCliPanel(false)} className="text-[var(--text-dim)] hover:text-white">
+              <X size={14} />
+            </button>
+          </div>
+          {sessionLogs.length === 0 ? (
+            <p className="text-[11px] text-zinc-500 py-2">
+              [amoun-cli] ready. Listening for pipeline events and LLM streaming...
+            </p>
+          ) : (
+            <div className="space-y-1 text-[11px]">
+              {sessionLogs.map((log, i) => {
+                const isErr = log.type === 'error';
+                return (
+                  <div key={log.id || i} className="flex items-start gap-2 leading-relaxed">
+                    <span className="text-zinc-500 text-[10px] shrink-0">
+                      [{new Date(log.timestamp).toLocaleTimeString()}]
+                    </span>
+                    <span className={isErr ? 'text-red-400' : 'text-emerald-400'}>
+                      {log.type === 'user/message' ? '❯ USER_INPUT' : log.type === 'assistant/message' ? '◆ ASSISTANT_RESPONSE' : '⛔ ERROR'}
+                    </span>
+                    <span className="text-zinc-300 truncate">
+                      {typeof log.payload === 'object' ? JSON.stringify(log.payload) : String(log.payload)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
       {/* Messages */}
       <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Interactive Preferences / Selection Card (Manus Style) */}
+        {showPreferencesCard && (
+          <InteractiveSelectionCard
+            onSubmit={(res, text) => {
+              setShowPreferencesCard(false);
+              sendMessage(text);
+            }}
+            onSkip={() => setShowPreferencesCard(false)}
+            isRtl={isRtl}
+          />
+        )}
         {messages.length === 0 && (
           <div className="flex items-center justify-center h-full text-center">
             <div>
@@ -182,6 +517,26 @@ export default function WorkspaceView() {
                     <div className="markdown-body text-sm text-[var(--text-secondary)]" dir="auto">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                     </div>
+                  </div>
+                )}
+
+                {/* 🔑 API-key error → CTA to Settings (رسايل أخطاء مصرية) */}
+                {msg.role === 'assistant' && !msg.isStreaming && msg.apiKeyError && msg.content.startsWith('❌') && (
+                  <button
+                    onClick={() => useWorkspaceStore.getState().setActiveView('settings')}
+                    className="mt-2 inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 hover:bg-amber-500/25 transition-colors cursor-pointer"
+                  >
+                    <KeyRound size={12} />
+                    {isRtl ? 'ضيف مفتاح الـ API من الإعدادات' : 'Add your API key in Settings'}
+                    <Settings size={12} className="opacity-70" />
+                  </button>
+                )}
+
+                {/* ⏱ Persisted generation transparency — الثواني والحالة النهائية من بيانات الرسالة */}
+                {msg.role === 'assistant' && !msg.isStreaming && msg.generationSeconds != null && (
+                  <div className="mt-1 flex items-center gap-1.5 text-[10px] text-[var(--text-dim)]">
+                    <span className="font-mono" dir="ltr">⏱ {msg.generationSeconds}s</span>
+                    {msg.generationFinalStatus && <span>· {msg.generationFinalStatus}</span>}
                   </div>
                 )}
 
@@ -280,6 +635,17 @@ export default function WorkspaceView() {
             </div>
           ))}
 
+        {/* Live Process Sequential Updates Badge (Manus Style) */}
+        {isGenerating && (
+          <LiveProcessBadge
+            title={isRtl ? 'استكشاف سياق المحادثة والملفات والأدوات' : 'Exploring context, files & tools'}
+            type="process"
+            events={sessionLogs}
+            isCompleted={false}
+            isRtl={isRtl}
+          />
+        )}
+
         {isGenerating && <GenerationIndicator isRtl={isRtl} />}
         <div ref={messagesEndRef} />
       </div>
@@ -288,6 +654,77 @@ export default function WorkspaceView() {
       <div className="shrink-0 p-4 border-t border-[var(--border)]">
         <ChatInput onSend={handleSend} disabled={isGenerating} />
       </div>
+
+      {/* Rename Session Dialog */}
+      {renameDialogOpen && session && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="glass rounded-2xl p-5 border border-white/15 max-w-sm w-full space-y-4 shadow-2xl bg-[#0e0e14]" dir={isRtl ? 'rtl' : 'ltr'}>
+            <h3 className="text-sm font-bold text-[var(--text-primary)] font-[var(--font-display)]">
+              {isRtl ? 'إعادة تسمية المحادثة' : 'Rename Chat'}
+            </h3>
+            <input
+              type="text"
+              value={sessionTitleInput}
+              onChange={(e) => setSessionTitleInput(e.target.value)}
+              className="w-full text-xs text-[var(--text-primary)] bg-white/5 border border-white/15 rounded-xl p-2.5 outline-none focus:border-[var(--accent-400)]"
+              dir="auto"
+            />
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                onClick={() => setRenameDialogOpen(false)}
+                className="px-3 py-1.5 rounded-xl text-xs text-[var(--text-muted)] hover:bg-white/5 cursor-pointer"
+              >
+                {isRtl ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                onClick={() => {
+                  if (sessionTitleInput.trim()) renameSession(session.id, sessionTitleInput.trim());
+                  setRenameDialogOpen(false);
+                }}
+                className="px-4 py-1.5 rounded-xl text-xs bg-[var(--accent-400)] text-black font-bold hover:opacity-90 cursor-pointer shadow-sm"
+              >
+                {isRtl ? 'حفظ' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule Task Dialog */}
+      {scheduleDialogOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="glass rounded-2xl p-5 border border-white/15 max-w-sm w-full space-y-4 shadow-2xl bg-[#0e0e14]" dir={isRtl ? 'rtl' : 'ltr'}>
+            <h3 className="text-sm font-bold text-[var(--text-primary)] font-[var(--font-display)]">
+              {isRtl ? 'جدولة مهمة جديدة' : 'Schedule a Task'}
+            </h3>
+            <textarea
+              value={scheduleTaskInput}
+              onChange={(e) => setScheduleTaskInput(e.target.value)}
+              rows={3}
+              placeholder={isRtl ? 'اكتب تفاصيل المهمة...' : 'Enter task description...'}
+              className="w-full text-xs text-[var(--text-primary)] bg-white/5 border border-white/15 rounded-xl p-2.5 outline-none focus:border-[var(--accent-400)] resize-none"
+              dir="auto"
+            />
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                onClick={() => setScheduleDialogOpen(false)}
+                className="px-3 py-1.5 rounded-xl text-xs text-[var(--text-muted)] hover:bg-white/5 cursor-pointer"
+              >
+                {isRtl ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                onClick={() => {
+                  if (scheduleTaskInput.trim()) addTask(scheduleTaskInput.trim(), 'manual');
+                  setScheduleDialogOpen(false);
+                }}
+                className="px-4 py-1.5 rounded-xl text-xs bg-[var(--accent-400)] text-black font-bold hover:opacity-90 cursor-pointer shadow-sm"
+              >
+                {isRtl ? 'إضافة للمهام' : 'Add to Tasks'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

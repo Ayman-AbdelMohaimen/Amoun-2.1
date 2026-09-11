@@ -467,6 +467,7 @@ export interface ModelTestResult {
  * Sends a minimal "ping" request to a specific model and reports
  * availability with the REAL provider error on failure (Arabic).
  * Used by the Settings ⚡ connection-tester — never touches chat state.
+ * Acceptance: any result within 10s — a dead provider must never hang the tester.
  */
 export async function testModel(
   providerId: LLMProviderId,
@@ -475,6 +476,9 @@ export async function testModel(
   isRtl: boolean = true,
 ): Promise<ModelTestResult> {
   const startTime = performance.now();
+  // 10s hard cap (Plan 1.1) — LIMITS.ABORT_TIMEOUT (120s) is too generous for a ping
+  const timeoutController = new AbortController();
+  const timer = setTimeout(() => timeoutController.abort(), 10_000);
   try {
     await processPrompt({
       messages: [
@@ -489,6 +493,7 @@ export async function testModel(
       providerId,
       systemPrompt: 'Reply with exactly one word: pong',
       customModel,
+      signal: timeoutController.signal,
     });
     const latencyMs = Math.round(performance.now() - startTime);
     return {
@@ -501,12 +506,24 @@ export async function testModel(
   } catch (error) {
     const latencyMs = Math.round(performance.now() - startTime);
     const raw = error instanceof Error ? error.message : String(error);
-    const unwrapped = unwrapErrorMessage(raw);
+    // Our own 10s cap fired — friendlier than a raw abort error
+    if (timeoutController.signal.aborted) {
+      return {
+        ok: false,
+        latencyMs,
+        message: isRtl
+          ? '⏱ مجابش في 10 ثواني — غالباً الموديل مش متاح دلوقتي'
+          : '⏱ No response within 10s — likely unavailable',
+      };
+    }
     // For the tester show the humanized reason WITHOUT the technical wall —
     // the raw detail goes to the console for debugging.
     console.warn(`[ModelTester] ${providerId}/${modelId} failed:`, raw);
+    const unwrapped = unwrapErrorMessage(raw);
     const humanized = humanizeError(unwrapped, isRtl);
     const short = humanized.split('\n')[0]; // first line only — no tech detail block
     return { ok: false, latencyMs, message: `❌ ${short.replace(/^❌/, '').trim() || short}` };
+  } finally {
+    clearTimeout(timer);
   }
 }

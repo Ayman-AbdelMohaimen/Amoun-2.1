@@ -2,7 +2,7 @@
 
 > **المرجع الرئيسي** — الوثيقة دي هي خريطة الطريق الحية للتطبيق: إحنا جتنا منين، إحنا فين دلوقتي، والـ Pipelines شغالة إزاي بالظبط من جوه الكود الفعلي.
 >
-> **آخر تحديث:** 2026-08-25 | **الحالة:** Pre-Production | **المالك:** العرآب — 100MillionDEV
+> **آخر تحديث:** 2026-09-11 | **الحالة:** 🚀 GMT — Go To Market (بيتّا Live على Wazeer.me — `main` مستقر + CI/CD + فرع `v2.2-dev` للتطوير) | **المالك:** العرآب — 100MillionDEV
 
 ---
 
@@ -40,6 +40,10 @@ Search mock               Gemini Grounding حقيقي           + إصلاح Cus
 | v2.0 | إعادة كتابة كاملة: AIGateway موحد، Zustand 5، IndexedDB wrapper، Helmet + Rate limiting | الأساس الحالي |
 | v2.1 | Onboarding Wizard، مفاتيح API في IndexedDB، فصل Tools عن Grounding، توسيع الموديلات (NVIDIA NIM group) | 90% جاهزية |
 | 2026-08-25 | **جلسة الإصلاح الكبرى**: باج Custom Models + 16 خطأ TS + توصيل HorusGuard + Event Log + Throttling + اعتماد استراتيجيات DSH | جاهزون للـ Build النظيف |
+| 2026-08-30 | **شفافية مثبتة + فاحص الموديلات**: عداد الثواني يتحفظ جوه ChatMessage + زر الإعدادات في أخطاء المفاتيح + سقف 10 ثواني لـ testModel | مستوى الخدمة ارتفع |
+| 2026-09-02 | **Login + About + Core Services**: Google OAuth بضغطة واحدة + صفحة About + CRUD Contributors + IndexedDB v6 + Sidebar Info icon fix + Token Manager + Exporters/Importers + Sub-Error Boundaries | جاهزية 95% (تمام اللوجين)
+| 2026-09-08 | **Command Center release**: إعادة بناء HomeView على موك-أب مركز القيادة الذكي (Hero · Quick Actions · Daily %) | بيتّا على Wazeer.me
+| 2026-09-11 | **🚀 GMT — Go To Market**: إصلاح Honeypot typo + فحص Phase 1 (السورس أسبق من الوثائق) + CI/CD + فرع v2.2-dev | بيتّا Live + CI أخضر
 
 ### درس الـ v2.0 المهم
 وثيقة `Full-Handover-for-Request-and-all-functioning-Pipelines.md` بتوصف معمارية **v2.0 القديمة** (stores منفصلة، client/server منفصلين) — **مش مطابقة للواقع الحالي**. الوثيقة دي (اللي بتقراها) هي المرجع الصحيح لـ v2.1.
@@ -51,20 +55,23 @@ Search mock               Gemini Grounding حقيقي           + إصلاح Cus
 ```
 src/
 ├── main.tsx                    # Bootstrap: wazeerDB.init() + Service Worker
-├── App.tsx                     # ViewRouter (switch بسيط) + Modals + Theme
-├── types/index.ts              # ⭐ المصدر الوحيد لكل الـ Types
-├── constants/index.ts          # ⭐ PROVIDERS registry + BASE_SYSTEM_PROMPT + LIMITS
+├── App.tsx                     # ViewRouter + **Sub-ErrorBoundaries** (TopBar/Sidebar/Workspace/ArtifactPanel) + Modals + Theme
+├── types/index.ts              # ⭐ المصدر الوحيد لكل الـ Types + Contributor type
+├── constants/index.ts          # ⭐ PROVIDERS + CHAT_MODES + **NAV_ITEMS شاملة About (Info icon)** + ADMIN_EMAILS + THEME_PRESETS
 │
 ├── store/
 │   └── workspaceStore.ts       # 🧠 قلب التطبيق (Zustand): sessions, tasks, projects,
-│                               #    models, sendMessage (الـ Pipeline الرئيسية), persistence
+│                               #    models, sendMessage, **rateMessage, runTask, templates CRUD,
+│                               #    activityDates (streak), dailySuggestion, importTasks, markActivityToday**
 │
 ├── services/
 │   ├── AIGateway.ts            # 🚪 البوابة الموحدة: routing + SSE + retry/fallback
+│   ├── AuthService.ts          # 🔐 **Hybrid Auth**: registerUser/loginUser + **loginOAuth (Google)** +
+│   │                           #    resolveRole + silentReAuth + SHA-256 hashing + Firestore sync
 │   ├── providers/
 │   │   └── geminiProvider.ts   # Gemini SDK مباشر (streaming + ReAct tools)
 │   ├── tools/
-│   │   └── ToolRegistry.ts     # تعريفات الأدوات + VFS + 🆕 HorusGuard guard
+│   │   └── ToolRegistry.ts     # تعريفات الأدوات + VFS + HorusGuard guard
 │   ├── security/
 │   │   ├── HorusGuard.ts       # AST scanner (Babel) — 16 قاعدة تهديد
 │   │   └── PromptSanitizer.ts  # تنقية مدخلات المستخدم
@@ -72,11 +79,16 @@ src/
 │       ├── ContextBuilder.ts   # تجميع system prompt (مهام + ذاكرة + مشروع)
 │       ├── LearningEngine.ts   # استخراج المهام (JSON من AI + heuristics عربي/إنجليزي)
 │       ├── MemoryEngine.ts     # الذاكرة التراكمية (استخراج بـ Gemini + استرجاع بالكلمات)
-│       └── TaskScheduler.ts    # تنفيذ تلقائي للمهام المستحقة كل 5 دقائق
+│       ├── TaskScheduler.ts    # تنفيذ تلقائي للمهام المستحقة كل 5 دقائق
+│       └── TokenManager.ts     # 🆕 **Token Budgeting**: estimateTokens() (عربي 2.5/إنجليزي 4 حرف)
+│                               #    + compactMessages() تلقائي عند 70% من حد الموديل
 │
 ├── lib/
-│   ├── db.ts                   # IndexedDB "Monmamar" v5 — 9 stores + in-memory fallback
-│   └── firestore.ts            # مزامنة سحابية (users, auth_logs, banned_nodes)
+│   ├── db.ts                   # IndexedDB "Monmamar" **v6** — 10 stores + in-memory fallback
+│   ├── firestore.ts            # مزامنة سحابية (users, auth_logs, banned_nodes)
+│   ├── errorHumanize.ts        # أخطاء مترجمة مصري + isApiKeyError() للـ Settings CTA
+│   ├── exporters.ts            # 🆕 تصدير Artifacts/مهام: .md/.html/.json/.txt/CSV + downloadFile()
+│   └── importers.ts            # 🆕 استيراد مهام: JSON/CSV/MD + detectFormat + dedup + ImportedTaskDraft
 │
 ├── server/                     # Express (tsx) — بورت 3000
 │   ├── index.ts                # Helmet + Rate limits + Admin API + SPA fallback
@@ -84,11 +96,19 @@ src/
 │   └── proxyFactory.ts         # http-proxy-middleware v3 (timeout 120s + error sanitize)
 │
 └── components/
-    ├── layout/TopBar.tsx       # ⭐ Model Selector (بيضيف Custom models للقايمة)
-    ├── views/                  # Home, Workspace, Settings, Projects, Admin, Placeholders
+    ├── layout/TopBar.tsx       # ⭐ Model Selector (custom models) + User/Login button trigger
+    ├── layout/Sidebar.tsx      # **Info icon مضاف للـ ICON_MAP** + sessions context menu
+    ├── layout/Footer.tsx       # Footer ثابت مع الحالة
+    ├── layout/MobileBottomNav.tsx  # Bottom Navigation للموبايل
+    ├── views/                  # Home, Workspace, Settings, Projects, Admin +
+    │                           #   🆕 **AboutView** (Contributor Cards + Admin CRUD Modal)
+    │                           #   + Templates, History, Compute, Storage, Agents, Skills, Reports, Integrated, KingsTools, Landing
     ├── OnboardingWizard.tsx    # ترحيب → مفاتيح مجانية → لغة/ثيم → جولة
     ├── AddModelModal.tsx       # إضافة موديل مخصص (endpoint + key + vision)
-    └── ChatInput.tsx           # إدخال + مايك (STT) + مرفقات + أوضاع المحادثة
+    ├── LoginModal.tsx          # 🆕 **Email/Password + Google OAuth بضغطة واحدة** (Firebase Auth signInWithPopup dynamic import)
+    ├── ArtifactPanel.tsx       # لوحة البرديات
+    ├── ChatInput.tsx           # إدخال + مايك (STT) + مرفقات + أوضاع المحادثة
+    └── ErrorBoundary.tsx       # **Sub-Error Boundaries** لكل وحدة (منع انهيار كامل التطبيق)
 ```
 
 **قاعدة التبعية الذهبية:** `components → store → services → lib/db` — ممنوع عكس الاتجاه. الـ store هو النقطة الوحيدة اللي بتلمس الـ services.
@@ -225,27 +245,56 @@ Express (tsx) بورت 3000:
     dashboard | action (ban/unban/promote/demote) | create-user | users
 ```
 
+### 🔐 Pipeline 9: Hybrid Auth (Email/Password + Google OAuth) 🆕
+
+```
+LoginModal (UI)
+├─► Email/Password
+│    ├── isRegister ? registerUser(name, email, password) : loginUser(email, password)
+│    ├── SHA-256 hash لكلمة المرور via Web Crypto API (مفيش clear text)
+│    ├── resolveRole(email): ADMIN_EMAILS → admin، غيره → user
+│    ├── حفظ User في IndexedDB stores (users + config.wazir_user)
+│    └── syncUserToFirestore + logAuthEvent (local + Firestore)
+│
+└─► Google OAuth (handleGoogleLogin)
+     ├── Dynamic import: firebase/auth → getAuth() + GoogleAuthProvider + signInWithPopup
+     │   (Firebase مش bundle بشكل دائم — فقط لما المستخدم يختار Google)
+     ├── result.user → displayName, email, photoURL
+     ├── loginOAuth(displayName, email, photoURL):
+     │    ├── لو مستخدم جديد → auto-register (مفيش passwordHash للمستخدمين OAuth)
+     │    ├── لو موجود → تحديث lastLogin + avatar + name + re-resolve role
+     │    ├── حفظ في IndexedDB + sync Firestore
+     │    └── check banned (role === 'banned' → خطأ)
+     ├── silentReAuth على app boot: استرجاع Session + re-resolve role
+     ├── logoutUser(): مسح session token + مسح wazir_user من config
+     └── createSessionToken() → UUID في localStorage (wazir_session_token)
+```
+
 ---
 
 ## 4. قواعد البيانات
 
-### IndexedDB — `Monmamar` **v5** (9 stores)
+### IndexedDB — `Monmamar` **v6** (10 stores)
 
-| Store | Key | الاستخدام |
-|-------|-----|-----------|
-| `config` | id | API keys + المستخدم + events + tasks القديمة |
-| `state` | id | `workspace_state` — الـ snapshot الكامل |
-| `session_events` | id (AI) | 🆕 **Event Log** — append-only، indexes: sessionId, timestamp |
-| `artifacts` | id | كتل الكود المستخرجة (indexes: chatId, type, pinned) |
-| `userMemory` | id (AI) | الذاكرة التراكمية المصنفة |
-| `users` | email | حسابات محلية |
-| `auth_logs` | id | أحداث الدخول محلياً |
-| `banned_nodes` | ip | محظورون محلياً |
-| `logs` | id (AI) | محجوز — مش مستهلك بالـ UI |
+| Store | Key | الاستخدام | الحالة |
+|-------|-----|-----------|--------|
+| `config` | id | API keys + المستخدم + events + tasks القديمة | ✅ مستخدم |
+| `state` | id | `workspace_state` — الـ snapshot الكامل (streak activityDates + dailySuggestion هنا) | ✅ مستخدم |
+| `logs` | id (AI) | Event logs | ⚠️ مخزن بس مش متعامل معاه UI |
+| `artifacts` | id | كتل الكود المستخرجة (indexes: chatId, type, pinned, createdAt) | ✅ مستخدم + Exporters |
+| `auth_logs` | id | أحداث الدخول محلياً (login/register/oauth_login/failed_login/logout) | ✅ مستخدم في AuthService |
+| `banned_nodes` | ip | محظورون محلياً | ⚠️ متعرف بس Firestore هو الأساسي |
+| `userMemory` | id (AI) | الذاكرة التراكمية المصنفة (category, createdAt, sourceSession) | ✅ مستخدم في MemoryEngine |
+| `users` | email | حسابات محلية (OAuth + Email/Password مع passwordHash nullable) | ✅ مستخدم في AuthService |
+| `session_events` | id (AI) | Event Log append-only: sessionId, timestamp indexes | ✅ write-side منفذ |
+| `contributors` | id | 🆕 كروت صفحة About — ترتيب (order index) + صورة + سوشيال | ✅ منفذ في AboutView |
 
 ### Firestore (سحابي — اختياري للـ Admin)
 
 `users/{id}` + `auth_logs/{id}` + `banned_nodes/{id}` — بيتفعلو مع `VITE_FIREBASE_*` + `FIREBASE_SERVICE_ACCOUNT`. **قواعد الـ Security Rules في `firestore.rules` لازم تنشر قبل فتح التسجيل.**
+
+Auth Event Types المحفوظة في `auth_logs`:
+- `login`, `logout`, `register`, `oauth_login`, `failed_login`, `role_change`, `user_banned`, `user_unbanned`
 
 ---
 
@@ -276,7 +325,7 @@ Express (tsx) بورت 3000:
 | # | الخطرة | التفصيل | العلاج | التوقيت |
 |---|--------|---------|--------|---------|
 | 1 | 💥 **workspace_state blob** | كل تغيير بيعمل rewrite لكل الجلسات → بطء + quota (~50MB) + jank | تقسيم لكل-session records + debounce + الانتقال التدريجي للـ event log كـ source of truth | بعد أول 20 مستخدم نشط |
-| 2 | 💥 **مفيش Token Budget/Compaction** | تاريخ الجلسة كله بيتبعت كل رسالة → 400 errors مع الجلسات الطويلة | history trimming + تلخيص الرسايل القديمة (compaction على طريقة DSH) | P1 — قبل 50 مستخدم |
+| 2 | 🟡 ~~مفيش Token Budget/Compaction~~ | ✅ **اتحلّ!** TokenManager.ts + estimateTokens + compactMessages عند 70% | **UI Indicator** شريط استهلاك tokens في ChatInput (اللي ناقص بس) | P1 — قبل 50 مستخدم |
 | 3 | ⚡ Re-render لكل token | اتحل جزئياً بالـ 50ms throttle؛ فاضل تحسين MessageList (memoization) | React.memo + virtualization لو القوائم طويلة | P2 |
 | 4 | 🔐 **Admin auth وهمي** | `x-user-id`/`x-user-role` headers من الـ client — منتحلة بـ curl | Firebase ID token verification في `requireAdmin` | **قبل أول 50 مستخدم** |
 | 5 | 🐌 MemoryEngine بيتضخم | قراءة كل الذكريات كل رسالة + N writes للـ accessCount + **مفيش dedup** | dedup بالتشابه (85%) + batch access updates + cap | P1 |
@@ -284,6 +333,8 @@ Express (tsx) بورت 3000:
 | 7 | 🔑 GLM JWT client-side | السر في المتصفح — مقبول في BYOK، بس يتوثق كـ risk | توثيق + تعليمات للمستخدم | مقبول |
 | 8 | 📡 Custom endpoints CORS | fetch مباشر من المتصفح — Groq/OpenRouter بيوافقوا، OpenAI بيرفض | توثيق الـ providers الـ CORS-friendly + relay اختياري في السيرفر لاحقاً | حسب الحاجة |
 | 9 | 🎭 SWARM pill كذب | StatusPill أخضر hardcoded — mock في production | توصيله بـ swarmStore أو إزالته | قرار من العرآب |
+| 10 | 🔴 Artifact Panel ناقص | Exporters/Importers جاهزة لكن: (1) تسمية ذكية HTML/MD/Code، (2) Full Width toggle في ArtifactPanel | تكملة UI bindings + workspaceStore smart naming | P1 — قريب |
+| 11 | 🔴 Token Compaction مش متصل بالPipeline | TokenManager منفذ لكن `sendMessage()` ما تستدعيشه تلقائياً قبل AIGateway | استدعاء `compactMessages()` + حفظ summary في history عند البوابة | P1 |
 
 ---
 
@@ -318,6 +369,32 @@ pm2 save && pm2 startup
 - ✅ HorusGuard كان يتيم → دخل الـ Tool Pipeline كـ guard
 - ✅ تحذيرات `[DOM] Password field` (forms في OnboardingWizard + AddModelModal)
 - ✅ Streaming re-render لكل token → throttle 50ms
+
+**اتصلحت (2026-08-30):**
+- ✅ عداد الثواني + الحالة العربية النهائية بتتحفظ جوه ChatMessage (مش UI مؤقت)
+- ✅ زر الإعدادات الذهي في أخطاء الـ API key (isApiKeyError + setActiveView settings)
+- ✅ سقف 10 ثواني لـ testModel (فاحص الموديلات مش هيطلّ فوق ده)
+- ✅ Plan 1.3 (rateMessage 👎/😍) و Plan 1.1 (testModel) كانوا متنفذين في الكود بس مش مسجلين في الوثائق
+
+**اتصلحت (2026-09-02):**
+- ✅ Google OAuth بالكامل: LoginModal + AuthService loginOAuth + Firebase Auth dynamic import
+- ✅ صفحة About عامة: Contributor Cards كاملة (صورة + اسم + وظيفة + نبذة + 4 سوشيال)
+- ✅ Contributor CRUD كامل: Modal إضافة/تعديل/حذف + Admin hover actions + ترتيب
+- ✅ IndexedDB v6 bump + contributors store جديد مع order index
+- ✅ NAV_ITEMS فيه About مع Info icon + Sidebar ICON_MAP اتصلح (كان ناقص Info)
+- ✅ ViewRouter فيه About case + App.tsx imports كاملة
+- ✅ Sub-Error Boundaries: TopBar/Sidebar/Workspace/ArtifactPanel مغلفين بـ ErrorBoundary
+- ✅ Token Budgeting كامل: estimateTokens + compactMessages عند 70% في TokenManager
+- ✅ Exporters/Importers: exporters.ts كامل (.md/.html/.json/.txt/CSV) + importers.ts كامل (JSON/CSV/MD + dedup)
+- ✅ Prompt Templates CRUD + useTemplate (فتح session جديد مع preset)
+- ✅ runTask زر RUN على المهام + rateMessage تقييم الرسايل مسجلة فعلاً
+- ✅ Streak (activityDays) + Daily Suggestion (اقتراح أُمون يومي يتولد مرة كل 24 ساعة)
+- ✅ Mark "PanelLeftOpen import bug" محلول (اتضاف في TopBar + rebuild bundle)
+
+**اتصلحت (2026-09-11) — جولة GMT:**
+- ✅ Honeypot 3-strikes مكتمل (كان فاضل typo): `HONEYPOT_FIELD_NAMES` → `HONEYPOT_ONBOARDING_FIELDS` في OnboardingWizard — **tsc 0 أخطاء + build ناجح**
+- ✅ فحص Phase 1 ضد الكود: smart naming · full-width toggle · token auto-compaction · token UI indicator — كلها مؤكدة منفذة (الاتوثيق كان متأخر عن السورس)
+- ✅ CI/CD: GitHub Actions (tsc + vitest + build) على `main` + فتح فرع `v2.2-dev`
 
 **المفتوحة:** شوف `Tasks.md` — فيه التوزيع الكامل P0/P1/P2 + roadmap الـ DSH.
 

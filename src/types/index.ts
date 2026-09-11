@@ -9,8 +9,8 @@
 // ENUMS & LITERALS
 // ═══════════════════════════════════════════════════════════════════
 
-/** Chat modes that modify system prompt behavior */
-export type ChatMode = 'minister' | 'general' | 'coding' | 'brainstorm' | 'files' | 'research' | 'education';
+/** Chat modes that modify system prompt behavior — exactly 4 (unified with Home Command Center) */
+export type ChatMode = 'minister' | 'research' | 'education' | 'coding';
 
 /** Available LLM provider identifiers */
 export type LLMProviderId =
@@ -50,6 +50,7 @@ export type ViewType =
   | 'projects'
   | 'settings'
   | 'admin'
+  | 'agents'
   | 'templates'
   | 'kings-tools'
   | 'history'
@@ -57,9 +58,22 @@ export type ViewType =
   | 'compute'
   | 'storage'
   | 'integrated'
-  | 'agents'
   | 'skills'
-  | 'reports';
+  | 'reports'
+  | 'about';
+
+export interface Contributor {
+  id: string;
+  name: string;
+  role: string;
+  avatarUrl?: string;
+  bio?: string;
+  linkedin?: string;
+  facebook?: string;
+  twitter?: string;
+  github?: string;
+  order?: number;
+}
 
 /** Agent status in the swarm */
 export type AgentStatus =
@@ -139,7 +153,7 @@ export interface User {
 export interface AuthLog {
   id: string;
   userId: string;
-  event: 'login' | 'logout' | 'register' | 'oauth_login' | 'failed_login' | 'role_change' | 'user_banned' | 'user_unbanned';
+  event: 'login' | 'logout' | 'register' | 'oauth_login' | 'failed_login' | 'role_change' | 'user_banned' | 'user_unbanned' | 'honeypot_trigger';
   email: string;
   timestamp: string;
   ip?: string;
@@ -178,6 +192,11 @@ export interface ChatMessage {
   /** User feedback — 👎 شبشب / 😍 قلوب */
   rating?: 'up' | 'down';
   ratingTags?: string[];
+  /** ⏱ Persisted generation transparency — stays on the record after completion (not volatile UI) */
+  generationSeconds?: number;
+  generationFinalStatus?: string;
+  /** 🔑 True when the failure was an API-key problem — shows the Settings CTA on the error bubble */
+  apiKeyError?: boolean;
 }
 
 export interface ChatSession {
@@ -188,6 +207,7 @@ export interface ChatSession {
   projectId?: string;
   modelId: string;
   summary?: string;
+  isFavorite?: boolean;
 }
 
 /**
@@ -295,6 +315,22 @@ export interface AgentState {
   tokensUsed: number;
   tasksCompleted: number;
   capabilities: string[];
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SKILLS (CUSTOM & SYSTEM)
+// ═══════════════════════════════════════════════════════════════════
+
+export interface CustomSkill {
+  id: string;
+  nameAr: string;
+  nameEn: string;
+  descAr: string;
+  descEn: string;
+  promptSnippet: string;
+  icon?: string;
+  enabled: boolean;
+  createdAt: string;
 }
 
 // ═══════════════════════════════════════════════════════════════════

@@ -9,6 +9,10 @@ import { useWorkspaceStore } from '@/store/workspaceStore';
 import { wazeerDB } from '@/lib/db';
 import { THEME_PRESETS, PROVIDERS, LOGO_GLYPH, AGENT_NAME_AR } from '@/constants';
 import type { ThemePreset } from '@/types';
+import {
+  recordHoneypotTrigger,
+  HONEYPOT_ONBOARDING_FIELDS,
+} from '@/services/security/HoneypotService';
 
 type StepId = 'welcome' | 'appearance' | 'api-key' | 'tour' | 'done';
 
@@ -58,6 +62,17 @@ export default function OnboardingWizard() {
     setApiKeys(prev => ({ ...prev, [provider]: value }));
 
   const saveKeysAndNext = async () => {
+    for (const fieldName of HONEYPOT_ONBOARDING_FIELDS) {
+      const el = document.querySelector<HTMLInputElement>(`input[name="${fieldName}"]`);
+      const val = el?.value ?? '';
+      if (val.trim()) {
+        const hp = await recordHoneypotTrigger(fieldName, val);
+        if (hp.banned) {
+          // Silent block — don't save, don't advance
+          return;
+        }
+      }
+    }
     try {
       await wazeerDB.saveApiKeys(apiKeys);
       setSavedFlash(true);
@@ -491,6 +506,24 @@ function ApiKeyStep({
         className="space-y-2 max-h-[260px] overflow-y-auto pr-1"
         onSubmit={e => e.preventDefault()}
       >
+        {/* Honeypot fields — invisible to humans, bots fill these
+        */}
+        <input
+          name="wazeer_company"
+          type="text"
+          tabIndex={-1}
+          autoComplete="off"
+          aria-hidden="true"
+          style={{ position: 'absolute', left: '-9999px', opacity: 0, pointerEvents: 'none', height: 0, width: 0 }}
+        />
+        <input
+          name="wazeer_city"
+          type="text"
+          tabIndex={-1}
+          autoComplete="off"
+          aria-hidden="true"
+          style={{ position: 'absolute', left: '-9999px', opacity: 0, pointerEvents: 'none', height: 0, width: 0 }}
+        />
         {recommended.map(r => {
           const p = PROVIDERS.find(pr => pr.id === r.provider);
           if (!p) return null;

@@ -45,6 +45,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'history', labelAr: 'السجل', labelEn: 'History', icon: 'Clock' },
   { id: 'settings', labelAr: 'الإعدادات', labelEn: 'Settings', icon: 'Settings' },
   { id: 'admin', labelAr: 'المدير', labelEn: 'Admin', icon: 'Shield', adminOnly: true },
+  { id: 'about', labelAr: 'عن المشروع', labelEn: 'About', icon: 'Info' },
 ];
 
 // ═══════════════════════════════════════════════════════════════════
@@ -60,32 +61,11 @@ export const CHAT_MODES: { id: ChatMode; labelAr: string; labelEn: string; icon:
     systemPrefix: '', // The BASE_SYSTEM_PROMPT already IS the minister prompt. Empty prefix = full minister mode.
   },
   {
-    id: 'general',
-    labelAr: 'عام',
-    labelEn: 'General',
-    icon: 'MessageSquare',
-    systemPrefix: 'أنت أمون في الوضع العام. أجب على سؤال المستخدم بوضوح وإيجاز. لا تستخرج مهام إلا إذا طلب المستخدم ذلك صراحة.',
-  },
-  {
     id: 'coding',
     labelAr: 'برمجة',
     labelEn: 'Coding',
-    icon: 'Code',
+    icon: '💻',
     systemPrefix: 'أنت أمون في وضع البرمجة. قدّم كوداً نظيفاً مع تعليقات. اشرح نهجك. اتبع مبادئ Green Code. استخرج المهام البرمجية المطلوبة.',
-  },
-  {
-    id: 'brainstorm',
-    labelAr: 'عصف ذهني',
-    labelEn: 'Brainstorm',
-    icon: 'Lightbulb',
-    systemPrefix: 'أنت أمون في وضع العصف الذهني. ولّد أفكار إبداعية، استكشف الاحتمالات. نظّم الأفكار القابلة للتنفيذ كمهام.',
-  },
-  {
-    id: 'files',
-    labelAr: 'ملفات',
-    labelEn: 'Files',
-    icon: 'FileText',
-    systemPrefix: 'أنت أمون في وضع تحليل الملفات. حلّل المرفقات بعمق واستخرج المعلومات الرئيسية والمهام المطلوبة.',
   },
   {
     id: 'research',

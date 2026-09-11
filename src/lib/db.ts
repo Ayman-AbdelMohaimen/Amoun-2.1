@@ -1,7 +1,7 @@
 /**
  * Wazeer OS v2.0 — IndexedDB Database Layer
- * Database: "Monmamar" v4
- * 8 stores: config, state, logs, artifacts, auth_logs, banned_nodes, userMemory, users
+ * Database: "Monmamar" v6
+ * 9 stores: config, state, logs, artifacts, auth_logs, banned_nodes, userMemory, users, contributors
  *
  * Green Code: Every store has a living consumer.
  * Security as Mindset: API keys in config store are never transmitted to our server.
@@ -86,6 +86,12 @@ const STORES: StoreDef[] = [
       { name: 'timestamp', keyPath: 'timestamp', options: { unique: false } },
     ],
   },
+  {
+    // v6 — About page contributors (admin-managed public cards).
+    name: 'contributors',
+    keyPath: 'id',
+    indexes: [{ name: 'order', keyPath: 'order', options: { unique: false } }],
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════════
@@ -93,7 +99,7 @@ const STORES: StoreDef[] = [
 // ═══════════════════════════════════════════════════════════════════
 
 const DB_NAME = 'Monmamar';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 class WazeerDB {
   private db: IDBDatabase | null = null;

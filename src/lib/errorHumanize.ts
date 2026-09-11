@@ -4,6 +4,11 @@
  * Used by: workspaceStore (chat bubbles) + AIGateway.testModel (model tester).
  */
 
+/** Detects API-key-related failures — used to attach the "add your key" Settings CTA to the error bubble. */
+export function isApiKeyError(raw: string): boolean {
+  return /API key not configured|api.?key.?invalid|invalid[ _-].*key|401|unauthorized|permission_denied/i.test(raw);
+}
+
 /** Extracts the human-readable message from (possibly nested) provider JSON error bodies.
  *  Handles prefixed text ("Too Many Requests: {...}") and prefers OpenRouter's
  *  error.metadata.raw which carries the actually useful upstream message. */

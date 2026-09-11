@@ -15,8 +15,18 @@ import WorkspaceView from '@/components/views/WorkspaceView';
 import SettingsView from '@/components/views/SettingsView';
 import ProjectsView from '@/components/views/ProjectsView';
 import AdminView from '@/components/views/AdminView';
-import PlaceholderView from '@/components/views/PlaceholderView';
-import { THEME_PRESETS } from '@/constants';
+import HistoryView from '@/components/views/HistoryView';
+import AgentsView from '@/components/views/AgentsView';
+import SkillsView from '@/components/views/SkillsView';
+import IntegratedView from '@/components/views/IntegratedView';
+import ReportsView from '@/components/views/ReportsView';
+import TemplatesView from '@/components/views/TemplatesView';
+import ComputeView from '@/components/views/ComputeView';
+import StorageView from '@/components/views/StorageView';
+import KingsToolsView from '@/components/views/KingsToolsView';
+import LandingView from '@/components/views/LandingView';
+import AboutView from '@/components/views/AboutView';
+import { THEME_PRESETS, LOGO_GLYPH } from '@/constants';
 import type { ViewType } from '@/types';
 
 export default function App() {
@@ -52,18 +62,35 @@ export default function App() {
   }, [theme, accentColor]);
 
   return (
-    <ErrorBoundary>
-      <div className="h-[100dvh] flex flex-col overflow-hidden bg-[var(--bg-outer)]">
-        <TopBar />
+    <ErrorBoundary title="خطأ في النظام الرئيسي">
+      <div className="h-[100dvh] flex flex-col overflow-hidden bg-[var(--bg-outer)] relative">
+        {/* 𓂀 Global Background Watermark — هالة العين الفرعونية في خلفية كل الصفحات */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-0 overflow-hidden opacity-[0.035]">
+          <span className="text-[38vw] leading-none font-bold text-[var(--accent-400)] filter blur-[1px]">
+            {LOGO_GLYPH}
+          </span>
+        </div>
+
+        <ErrorBoundary title="خطأ في الشريط العلوي">
+          <TopBar />
+        </ErrorBoundary>
         <div className="flex flex-1 overflow-hidden">
-          <Sidebar />
+          <ErrorBoundary title="خطأ في القائمة الجانبية">
+            <Sidebar />
+          </ErrorBoundary>
           <main className="flex-1 overflow-hidden">
-            <ViewRouter view={activeView} />
+            <ErrorBoundary title="خطأ في مساحة العرض">
+              <ViewRouter view={activeView} />
+            </ErrorBoundary>
           </main>
         </div>
         <MobileBottomNav />
         <Footer />
-        {isArtifactPanelOpen && <ArtifactPanel />}
+        {isArtifactPanelOpen && (
+          <ErrorBoundary title="خطأ في لوحة البرديات">
+            <ArtifactPanel />
+          </ErrorBoundary>
+        )}
         {showLoginModal && <LoginModal />}
         {showAddModelModal && <AddModelModal />}
         {showOnboardingWizard && <OnboardingWizard />}
@@ -79,17 +106,18 @@ function ViewRouter({ view }: { view: ViewType }) {
     case 'workspace': return <WorkspaceView />;
     case 'settings': return <SettingsView />;
     case 'projects': return <ProjectsView />;
-    case 'history': return <PlaceholderView viewId="history" labelAr="السجل" labelEn="History" />;
+    case 'history': return <HistoryView />;
     case 'admin': return <AdminView />;
-    case 'agents': return <PlaceholderView viewId="agents" labelAr="الوكلاء" labelEn="Agents" />;
-    case 'skills': return <PlaceholderView viewId="skills" labelAr="المهارات" labelEn="Skills" />;
-    case 'integrated': return <PlaceholderView viewId="integrated" labelAr="الربط" labelEn="Integrations" />;
-    case 'reports': return <PlaceholderView viewId="reports" labelAr="التقارير والرؤى" labelEn="Reports & Insights" />;
-    case 'templates': return <PlaceholderView viewId="templates" labelAr="القوالب" labelEn="Templates" />;
-    case 'compute': return <PlaceholderView viewId="compute" labelAr="الإحصائيات" labelEn="Compute" />;
-    case 'storage': return <PlaceholderView viewId="storage" labelAr="التخزين" labelEn="Storage" />;
-    case 'kings-tools': return <PlaceholderView viewId="kings-tools" labelAr="أدوات الملك" labelEn="King's Tools" />;
-    case 'landing': return <PlaceholderView viewId="landing" labelAr="الترحيب" labelEn="Landing" />;
+    case 'agents': return <AgentsView />;
+    case 'skills': return <SkillsView />;
+    case 'integrated': return <IntegratedView />;
+    case 'reports': return <ReportsView />;
+    case 'templates': return <TemplatesView />;
+    case 'compute': return <ComputeView />;
+    case 'storage': return <StorageView />;
+    case 'kings-tools': return <KingsToolsView />;
+    case 'landing': return <LandingView />;
+    case 'about': return <AboutView />;
     default: return <HomeView />;
   }
 }

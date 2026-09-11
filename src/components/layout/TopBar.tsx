@@ -2,13 +2,14 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ChevronDown, Mic, MicOff, Globe,
-  PanelLeftClose, LogIn, User, Plus, Check, LayoutTemplate,
-  X, RotateCcw,
+  PanelLeftClose, PanelLeftOpen, LogIn, User, Plus, Check, LayoutTemplate,
+  X, RotateCcw, Menu,
 } from 'lucide-react';
 import { useWorkspaceStore } from '@/store/workspaceStore';
 import { wazeerDB } from '@/lib/db';
 import { PROVIDERS } from '@/constants';
 import type { ModelInfo } from '@/types';
+import MobileNavDrawer from './MobileNavDrawer';
 
 export default function TopBar() {
   const {
@@ -18,7 +19,7 @@ export default function TopBar() {
     currentLanguage, setLanguage,
     voiceEnabled, toggleVoice,
     isArtifactPanelOpen, toggleArtifactPanel,
-    isSidebarCollapsed,
+    isSidebarCollapsed, toggleSidebar,
     user, setShowLoginModal,
     showAddModelModal, setShowAddModelModal,
     isGenerating,
@@ -32,6 +33,7 @@ export default function TopBar() {
 
   const isRtl = currentLanguage === 'ar';
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -190,10 +192,10 @@ export default function TopBar() {
           </AnimatePresence>
         </div>
 
-        {/* Artifacts — جمب قايمة الموديلات */}
+        {/* Artifacts — جمب قايمة الموديلات (مخفية على شاشات الموبايل الضيقة لمنع التكدس) */}
         <button
           onClick={toggleArtifactPanel}
-          className={`p-2 rounded-lg transition-colors cursor-pointer ${
+          className={`hidden sm:inline-flex p-2 rounded-lg transition-colors cursor-pointer ${
             isArtifactPanelOpen
               ? 'text-[var(--accent-400)] bg-[var(--accent-500)]/15 border border-[var(--accent-400)]/30'
               : 'text-[var(--text-muted)] hover:bg-white/5 hover:text-[var(--text-primary)]'
@@ -206,7 +208,7 @@ export default function TopBar() {
       </div>
 
       {/* Right (physical) — Actions */}
-      <div className="flex items-center gap-1.5 shrink-0">
+      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
         {/* SWARM — live dot (red if any agent errored, teal pulse while generating) */}
         <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/30 border border-white/8">
           <span className={`w-1.5 h-1.5 rounded-full ${isGenerating ? 'bg-teal-400 animate-pulse' : 'bg-emerald-500/70'}`} />
@@ -218,19 +220,20 @@ export default function TopBar() {
           <span className="text-[9px] font-mono tracking-widest text-[var(--text-dim)]">MONMAMAR DB</span>
         </div>
 
+        {/* Voice toggle — visible on tablet/desktop, in drawer on mobile */}
         <button
           onClick={toggleVoice}
-          className="p-2 rounded-lg hover:bg-white/5 transition-colors text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+          className="hidden sm:inline-flex p-2 rounded-lg hover:bg-white/5 transition-colors text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
           aria-label={isRtl ? 'تبديل الصوت' : 'Toggle voice'}
           title={voiceEnabled ? (isRtl ? 'إيقاف الصوت' : 'Mute voice') : (isRtl ? 'تفعيل الصوت' : 'Enable voice')}
         >
           {voiceEnabled ? <Mic size={18} /> : <MicOff size={18} />}
         </button>
 
-        {/* Working Language Switcher */}
+        {/* Working Language Switcher — visible on tablet/desktop, in drawer on mobile */}
         <button
           onClick={() => setLanguage(isRtl ? 'en' : 'ar')}
-          className="p-2 rounded-lg hover:bg-white/5 transition-colors text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer text-xs font-bold"
+          className="hidden sm:inline-flex p-2 rounded-lg hover:bg-white/5 transition-colors text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer text-xs font-bold"
           aria-label={isRtl ? 'English' : 'عربي'}
           title={isRtl ? 'Switch to English' : 'التبديل للعربية'}
         >
@@ -238,27 +241,55 @@ export default function TopBar() {
           <span>{isRtl ? 'EN' : 'عربي'}</span>
         </button>
 
-        {/* Artifacts button moved next to the model selector (center) */}
+        {/* Menu Toggle: Opens MobileNavDrawer on mobile, toggles sidebar on desktop */}
+        <button
+          onClick={() => {
+            if (typeof window !== 'undefined' && window.innerWidth < 768) {
+              setMobileDrawerOpen(true);
+            } else {
+              toggleSidebar();
+            }
+          }}
+          className="p-2 rounded-lg hover:bg-white/5 transition-colors text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+          aria-label={isRtl ? 'القائمة' : 'Menu'}
+          title={isRtl ? 'القائمة' : 'Menu'}
+        >
+          <span className="md:hidden">
+            <Menu size={18} />
+          </span>
+          <span className="hidden md:inline-flex">
+            {isSidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </span>
+        </button>
 
+        {/* Login / User button — ALWAYS visible, never pushed offscreen */}
         {user ? (
           <button
-            className="flex items-center gap-1.5 px-2 py-1 rounded-lg glass text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer max-w-[120px]"
+            onClick={() => {
+              if (typeof window !== 'undefined' && window.innerWidth < 768) {
+                setMobileDrawerOpen(true);
+              }
+            }}
+            className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg glass text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer shrink-0 max-w-[120px]"
             aria-label={user.name}
           >
-            <User size={16} className="shrink-0" />
+            <User size={15} className="shrink-0 text-[var(--accent-400)]" />
             <span className="truncate hidden sm:inline">{user.name}</span>
           </button>
         ) : (
           <button
             onClick={() => setShowLoginModal(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--accent-500)]/15 text-[var(--accent-400)] text-xs font-medium hover:bg-[var(--accent-500)]/25 transition-colors cursor-pointer"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[var(--accent-500)]/20 text-[var(--accent-400)] border border-[var(--accent-400)]/30 text-xs font-bold hover:bg-[var(--accent-500)]/30 transition-colors cursor-pointer shrink-0 shadow-sm"
             aria-label={isRtl ? 'تسجيل الدخول' : 'Login'}
           >
-            <LogIn size={15} />
-            <span className="hidden sm:inline">{isRtl ? 'دخول' : 'Login'}</span>
+            <LogIn size={14} className="shrink-0" />
+            <span>{isRtl ? 'دخول' : 'Login'}</span>
           </button>
         )}
       </div>
+
+      {/* Mobile Drawer */}
+      <MobileNavDrawer isOpen={mobileDrawerOpen} onClose={() => setMobileDrawerOpen(false)} />
     </header>
   );
 }
