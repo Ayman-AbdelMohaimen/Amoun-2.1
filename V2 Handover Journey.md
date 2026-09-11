@@ -43,7 +43,7 @@ Search mock               Gemini Grounding حقيقي           + إصلاح Cus
 | 2026-08-30 | **شفافية مثبتة + فاحص الموديلات**: عداد الثواني يتحفظ جوه ChatMessage + زر الإعدادات في أخطاء المفاتيح + سقف 10 ثواني لـ testModel | مستوى الخدمة ارتفع |
 | 2026-09-02 | **Login + About + Core Services**: Google OAuth بضغطة واحدة + صفحة About + CRUD Contributors + IndexedDB v6 + Sidebar Info icon fix + Token Manager + Exporters/Importers + Sub-Error Boundaries | جاهزية 95% (تمام اللوجين)
 | 2026-09-08 | **Command Center release**: إعادة بناء HomeView على موك-أب مركز القيادة الذكي (Hero · Quick Actions · Daily %) | بيتّا على Wazeer.me
-| 2026-09-11 | **🚀 GMT — Go To Market**: إصلاح Honeypot typo + فحص Phase 1 (السورس أسبق من الوثائق) + CI/CD + فرع v2.2-dev | بيتّا Live + CI أخضر
+| 2026-09-11 | **🚀 GMT — Go To Market**: إصلاح Honeypot typo + فحص Phase 1 (السورس أسبق من الوثائق) + CI/CD (main-only، أخضر) + فرع v2.2-dev + Vitest 23 اختبار + Honeypot Firestore logging + تأكيد auto-compaction في sendMessage بالكود | بيتّا Live + CI أخضر |
 
 ### درس الـ v2.0 المهم
 وثيقة `Full-Handover-for-Request-and-all-functioning-Pipelines.md` بتوصف معمارية **v2.0 القديمة** (stores منفصلة، client/server منفصلين) — **مش مطابقة للواقع الحالي**. الوثيقة دي (اللي بتقراها) هي المرجع الصحيح لـ v2.1.

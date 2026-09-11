@@ -149,7 +149,7 @@
 - [x] **🐝 Honeypot 3-strikes rule** (Production Review P0.5):
   - [x] أول 3 تفعيلات لـ honeypot → warning بس (منع false positives من browser autofill)
   - [x] بعد الثالث → actual ban (24h)
-  - [ ] log كل trigger في `auth_logs` **Firestore** + IndexedDB (IndexedDB منجز — Firestore اختياري)
+  - [x] log كل trigger في `auth_logs` **Firestore** + IndexedDB (منجز 2026-09-11 — fire-and-forget عبر `logAuthEventToFirestore`)
 
 ### 🟠 عالي الأولوية (بعد الفوري مباشرة)
 - [x] **Token Manager & Context Compaction**: `estimateTokens()` + `compactMessages()` في TokenManager.ts — منجز
@@ -159,7 +159,7 @@
 ### 🔐 أمان (Phase 1.5)
 - [ ] **Firebase Admin Auth حقيقي**: استبدال `x-user-role` headers بـ Firebase ID token verification في `requireAdmin`
 - [ ] **نشر Firestore Security Rules**: تطبيق `firestore.rules` الموجود + اختبار القواعد
-- [ ] **Vitest أساسي**: اختبارات AIGateway routing · LearningEngine · HorusGuard · exporters
+- [ ] **Vitest أساسي**: اختبارات AIGateway routing · LearningEngine · HorusGuard · exporters — منجز جزئياً (HorusGuard · exporters/importers · TokenManager = 23 اختبار ✓، باقي AIGateway routing · LearningEngine)
 
 ### 🟡 متوسط (Phase 2)
 - [ ] **🔑 API Key Pattern Detection في HorusGuard** (Production Review P1.1):
@@ -171,7 +171,7 @@
 - [ ] **Roles Engine**: `public/roles/*.md` + `services/rolesEngine.ts` + Roles Manager UI
 - [ ] **Execution Bridge**: `POST /api/execute` حقيقي مع whitelist + HorusGuard قبل التنفيذ
 - [ ] **Hermes المستقل**: وكيل خلفي مستقل بموديل/مفتاح خاص + Circuit Breaker
-- [ ] **Token Auto-Compaction في Pipeline**: تشغيل `compactMessages()` تلقائياً داخل `sendMessage()` قبل استدعاء AIGateway
+- [x] **Token Auto-Compaction في Pipeline**: تشغيل `compactMessages()` تلقائياً داخل `sendMessage()` قبل استدعاء AIGateway (منجز — مفيّد بالكود، workspaceStore.ts → `getSessionMessages`)
 
 ### 🟢 أداء (Phase 3)
 - [ ] **تقسيم `workspace_state` blob**: sessions/{id}/messages + sessions/{id}/metadata + global/settings — يمنع CPU jank مع كثرة الجلسات

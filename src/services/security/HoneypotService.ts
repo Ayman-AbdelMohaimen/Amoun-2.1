@@ -8,6 +8,7 @@
  */
 
 import { wazeerDB } from '@/lib/db';
+import { logAuthEventToFirestore } from '@/lib/firestore';
 import type { AuthLog, BannedNode } from '@/types';
 
 const HONEYPOT_CONFIG_KEY = 'honeypot_strikes';
@@ -72,6 +73,7 @@ async function logTrigger(
     }),
   };
   await wazeerDB.put('auth_logs', log);
+  void logAuthEventToFirestore(log);
 }
 
 async function banIpForHoneypot(ip: string, strikes: number): Promise<void> {
@@ -99,6 +101,7 @@ async function banIpForHoneypot(ip: string, strikes: number): Promise<void> {
     }),
   };
   await wazeerDB.put('auth_logs', log);
+  void logAuthEventToFirestore(log);
 }
 
 export interface HoneypotResult {
