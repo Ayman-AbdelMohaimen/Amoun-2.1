@@ -159,7 +159,7 @@
 ### 🔐 أمان (Phase 1.5)
 - [ ] **Firebase Admin Auth حقيقي**: استبدال `x-user-role` headers بـ Firebase ID token verification في `requireAdmin`
 - [ ] **نشر Firestore Security Rules**: تطبيق `firestore.rules` الموجود + اختبار القواعد
-- [ ] **Vitest أساسي**: اختبارات AIGateway routing · LearningEngine · HorusGuard · exporters — منجز جزئياً (HorusGuard · exporters/importers · TokenManager = 23 اختبار ✓، باقي AIGateway routing · LearningEngine)
+- [x] **Vitest أساسي**: اختبارات AIGateway routing · LearningEngine · HorusGuard · exporters — منجز 2026-09-11 (49 اختبار: AIGateway routing/retry/fallback · LearningEngine JSON+heuristics · HorusGuard · exporters/importers · TokenManager)
 
 ### 🟡 متوسط (Phase 2)
 - [ ] **🔑 API Key Pattern Detection في HorusGuard** (Production Review P1.1):
