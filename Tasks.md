@@ -19,6 +19,16 @@
 
 ---
 
+## ✅ سجل الإنجازات — opencode Integration (محلي E2E ✓)
+
+- [x] **كارت "opencode" في قسم الربط**: Activate/Disable + فحص الاتصال بالـ CLI + عرض الليميت (6/دقيقة) — `IntegratedView.tsx`
+- [x] **7 موديلات مجانية في القائمة**: Big Pickle، Nemotron 3 Ultra، Nemotron 3.5 Lightning، Muse Spark 1.3، Muse Spark 1.2، MiMo V2.5، Ling 3.0 Flash Fin — بدون أي API key — `constants/index.ts`
+- [x] **جسر سيرفر آمن**: `server/opencode.ts` → `opencode run -m <id>` عبر `execFile` (لا shell) + allow-list للموديلات المجانية + `stripOpencodeProgress()` فلترة سطور الحالة + Availability cache 60s + rate limit خاص 6/دقيقة/IP
+- [x] **تم التحقق فعلياً محلياً**: `opencode run -m opencode/big-pickle` ردّ حقيقي بدون key ✅ (الاسم القصير `big-pickle` مضبوط أنه بيُفشل — لازم المعرّف الكامل)
+- [x] **56 اختبار أخضر** (+7 جديد لـ opencode) + `tsc --noEmit` نظيف + `vite build` ناجح
+
+---
+
 ## ✅ سجل الإنجازات — 2026-09-08
 
 ### 🔥 إصلاح الشاشة البيضاء (Critical Production Fix)

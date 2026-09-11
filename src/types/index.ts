@@ -26,7 +26,8 @@ export type LLMProviderId =
   | 'mistral'
   | 'xai'
   | 'cerebras'
-  | 'custom';
+  | 'custom'
+  | 'opencode';
 
 /** Theme preset identifiers */
 export type ThemePreset = 'emerald' | 'cyber-blue' | 'crimson' | 'purple' | 'custom';

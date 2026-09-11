@@ -16,6 +16,7 @@ import rateLimit from 'express-rate-limit';
 import { join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { bindLlmRouters } from './providers';
+import { bindOpencodeRoutes } from './opencode';
 
 // ═══════════════════════════════════════════════════════════════════
 // ES MODULE DIRNAME FIX
@@ -119,6 +120,13 @@ bindLlmRouters(app);
 
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
+
+// ═══════════════════════════════════════════════════════════════════
+// OPENCODE INTEGRATION ROUTES
+// (after body parsing — these consume JSON; before the SPA fallback)
+// ═══════════════════════════════════════════════════════════════════
+
+bindOpencodeRoutes(app);
 
 // ═══════════════════════════════════════════════════════════════════
 // HEALTH CHECK

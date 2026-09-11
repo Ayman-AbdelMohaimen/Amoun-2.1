@@ -219,6 +219,26 @@ export const PROVIDERS: ProviderConfig[] = [
         capabilities: { vision: true, streaming: true, tools: true, grounding: false, maxTokens: 16384 }, pricing: { input: 0.15, output: 0.6 } },
     ],
   },
+  {
+    id: 'opencode', displayName: 'opencode (مجاني)', target: '', authHeader: '', pathPrefix: '',
+    models: [
+      // Free no-key models — run on the Wazeer server via `opencode run`. No API key needed.
+      { id: 'opencode-big-pickle', providerId: 'opencode', displayName: '⚡ Big Pickle', modelId: 'opencode/big-pickle',
+        capabilities: { vision: false, streaming: false, tools: true, grounding: false, maxTokens: 8192 }, pricing: { input: 0, output: 0 } },
+      { id: 'opencode-nemotron-ultra', providerId: 'opencode', displayName: 'Nemotron 3 Ultra', modelId: 'opencode/nemotron-3-ultra-free',
+        capabilities: { vision: false, streaming: false, tools: true, grounding: false, maxTokens: 8192 }, pricing: { input: 0, output: 0 } },
+      { id: 'opencode-nemotron-lightning', providerId: 'opencode', displayName: 'Nemotron 3.5 Lightning', modelId: 'opencode/nemotron-3.5-lightning-free',
+        capabilities: { vision: false, streaming: false, tools: true, grounding: false, maxTokens: 8192 }, pricing: { input: 0, output: 0 } },
+      { id: 'opencode-muse-1-3', providerId: 'opencode', displayName: 'Muse Spark 1.3', modelId: 'opencode/muse-spark-1.3-contributor-free',
+        capabilities: { vision: false, streaming: false, tools: true, grounding: false, maxTokens: 8192 }, pricing: { input: 0, output: 0 } },
+      { id: 'opencode-muse-1-2', providerId: 'opencode', displayName: 'Muse Spark 1.2', modelId: 'opencode/muse-spark-1.2-contributor-free',
+        capabilities: { vision: false, streaming: false, tools: true, grounding: false, maxTokens: 8192 }, pricing: { input: 0, output: 0 } },
+      { id: 'opencode-mimo', providerId: 'opencode', displayName: 'MiMo V2.5', modelId: 'opencode/mimo-v2.5-free',
+        capabilities: { vision: false, streaming: false, tools: true, grounding: false, maxTokens: 8192 }, pricing: { input: 0, output: 0 } },
+      { id: 'opencode-ling', providerId: 'opencode', displayName: 'Ling 3.0 Flash Fin', modelId: 'opencode/ling-3.0-flash-fin-free',
+        capabilities: { vision: false, streaming: false, tools: true, grounding: false, maxTokens: 8192 }, pricing: { input: 0, output: 0 } },
+    ],
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════════

@@ -382,6 +382,32 @@ export async function processPrompt(
         };
       }
 
+      // ── opencode: runs on the Wazeer server via the CLI — no user key ─
+      case 'opencode': {
+        const result = await proxyChat(
+          '/api/opencode/chat',
+          {
+            model: modelId,
+            messages: [
+              { role: 'system', content: systemPrompt + attachmentContext },
+              ...toOpenAIMessages(sanitizedMessages),
+            ],
+            systemPrompt: systemPrompt + attachmentContext,
+          },
+          {},
+          request.signal,
+          request.onChunk,
+        );
+
+        return {
+          content: result.content,
+          model: modelId,
+          provider: 'opencode',
+          tokensUsed: result.tokensUsed,
+          duration: performance.now() - startTime,
+        };
+      }
+
       // ── All other providers: Bearer token via proxy ────────────
       default: {
         const provider = findProvider(request.providerId);

@@ -1,4 +1,5 @@
-import { PlugZap, ShieldCheck, Globe, Cloud, Puzzle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { PlugZap, ShieldCheck, Globe, Cloud, Puzzle, Braces, Zap, CircleCheck, CircleX } from 'lucide-react';
 import { useWorkspaceStore } from '@/store/workspaceStore';
 import { PROVIDERS } from '@/constants';
 
@@ -6,8 +7,33 @@ import { PROVIDERS } from '@/constants';
 const CORS_DIRECT_OK = new Set(['groq', 'openrouter']);
 
 export default function IntegratedView() {
-  const { currentLanguage } = useWorkspaceStore();
+  const { currentLanguage, setActiveModel } = useWorkspaceStore();
   const isRtl = currentLanguage === 'ar';
+
+  const [ocStatus, setOcStatus] = useState<'checking' | 'available' | 'unavailable'>('checking');
+  const [ocEnabled, setOcEnabled] = useState(() => localStorage.getItem('wazeer_opencode_enabled') === '1');
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/opencode/status')
+      .then((r) => (r.ok ? r.json() : { available: false }))
+      .then((d: { available?: boolean }) => {
+        if (alive) setOcStatus(d.available ? 'available' : 'unavailable');
+      })
+      .catch(() => {
+        if (alive) setOcStatus('unavailable');
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const toggleOpencode = () => {
+    const next = !ocEnabled;
+    setOcEnabled(next);
+    localStorage.setItem('wazeer_opencode_enabled', next ? '1' : '0');
+    if (next) setActiveModel('opencode-big-pickle', 'opencode');
+  };
 
   return (
     <div className="h-full overflow-y-auto p-4 md:p-6 space-y-5">
@@ -37,6 +63,79 @@ export default function IntegratedView() {
           {isRtl
             ? `بتحوّل الطلبات لـ ${PROVIDERS.length} مزود عبر /api/proxy/* — مفاتيحك بتعيش في متصفحك وبتترسل مباشرة للمزود من خلال البوابة.`
             : `Routes requests to ${PROVIDERS.length} providers via /api/proxy/* — your keys stay in the browser.`}
+        </p>
+      </div>
+
+      {/* opencode integration — server-side CLI, no user API key */}
+      <div className="glass rounded-xl p-4 space-y-2.5 border border-[var(--accent-400)]/20">
+        <div className="flex items-center gap-2">
+          <Braces size={15} className="text-[var(--accent-400)]" />
+          <h2 className="text-xs font-medium text-[var(--text-secondary)]">opencode</h2>
+          <span
+            className={
+              'text-[9px] px-1.5 py-0.5 rounded-full ms-auto whitespace-nowrap ' +
+              (ocEnabled ? 'bg-emerald-500/15 text-emerald-300' : 'bg-white/8 text-[var(--text-muted)]')
+            }
+          >
+            {isRtl
+              ? ocEnabled ? 'مفعّل ✓' : 'متوقف'
+              : ocEnabled ? 'Enabled ✓' : 'Disabled'}
+          </span>
+        </div>
+
+        <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+          {isRtl
+            ? 'بيشغّل موديلات opencode المجانية على سيرفر وزير — من غير أي API key. بيفتَح الموديلات السبعة في قائمة اختيار الموديلات فوق (Big Pickle، Nemotron، Muse Spark، MiMo، Ling،…).'
+            : 'Runs opencode free models on the Wazeer server — zero API keys. Adds 7 free models to the model picker (Big Pickle, Nemotron, Muse Spark, MiMo, Ling, …).'}
+        </p>
+
+        <div className="flex items-center gap-2">
+          {/* Connection status */}
+          <span
+            className={
+              'inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full font-mono ' +
+              (ocStatus === 'available'
+                ? 'bg-emerald-500/15 text-emerald-300'
+                : ocStatus === 'checking'
+                  ? 'bg-white/8 text-[var(--text-muted)]'
+                  : 'bg-red-500/15 text-red-300')
+            }
+          >
+            {ocStatus === 'available' ? (
+              <CircleCheck size={11} />
+            ) : ocStatus === 'checking' ? (
+              <Zap size={11} className="animate-pulse" />
+            ) : (
+              <CircleX size={11} />
+            )}
+            {ocStatus === 'available'
+              ? (isRtl ? 'CLI متاح على السيرفر ✓' : 'CLI available ✓')
+              : ocStatus === 'checking'
+                ? (isRtl ? 'فحص الاتصال...' : 'Checking…')
+                : (isRtl ? 'CLI غير متاح على السيرفر' : 'CLI unavailable on server')}
+          </span>
+
+          {/* Toggle */}
+          <button
+            type="button"
+            onClick={toggleOpencode}
+            className={
+              'ms-auto text-[10px] px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ' +
+              (ocEnabled
+                ? 'bg-white/8 text-[var(--text-secondary)] hover:bg-white/12'
+                : 'bg-[var(--accent-400)] text-black hover:opacity-90')
+            }
+          >
+            {isRtl
+              ? ocEnabled ? 'إيقاف' : 'تفعيل ✓'
+              : ocEnabled ? 'Disable' : 'Activate ✓'}
+          </button>
+        </div>
+
+        <p className="text-[10px] text-[var(--text-dim)] leading-relaxed">
+          {isRtl
+            ? 'حد أمان: 6 محادثات/دقيقة لكل مستخدم على السيرفر. عند التفعيل، الموديل بيتبدل لـ "⚡ Big Pickle" — وغيّره من القائمة. متاح محلياً الـ CLI مثبت ✓'
+            : 'Safety limit: 6 chats/minute per user server-side. Activating selects "⚡ Big Pickle" — swap from the picker. CLI already verified locally ✓'}
         </p>
       </div>
 
