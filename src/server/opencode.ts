@@ -9,7 +9,9 @@
  * Green Code: availability is cached for 60s — no repeated spawn on every ping.
  */
 
-import { execFile, execFileSync } from 'child_process';
+import { execFileSync, spawn } from 'child_process';
+import { existsSync } from 'fs';
+import { resolve } from 'path';
 import rateLimit from 'express-rate-limit';
 import type { Express, Request, Response } from 'express';
 
@@ -17,10 +19,25 @@ import type { Express, Request, Response } from 'express';
 // CONFIG
 // ═══════════════════════════════════════════════════════════════════
 
-const OPENCODE_BIN = process.env.OPENCODE_BIN || 'opencode';
 const AVAILABILITY_TTL_MS = 60_000;
 const RUN_TIMEOUT_MS = 120_000;
 const LIMIT_PER_MINUTE = 6;
+
+/**
+ * Resolves the opencode CLI binary.
+ * npm shims are .cmd/.ps1 on Windows — `execFile` (no shell) can't run those,
+ * so we prefer the real .exe inside the installed package. Falls back to PATH.
+ */
+export function resolveOpencodeBin(): string {
+  if (process.env.OPENCODE_BIN) return process.env.OPENCODE_BIN;
+  if (process.platform === 'win32' && process.env.APPDATA) {
+    const exe = resolve(process.env.APPDATA, 'npm', 'node_modules', 'opencode-ai', 'bin', 'opencode.exe');
+    if (existsSync(exe)) return exe;
+  }
+  return 'opencode';
+}
+
+const OPENCODE_BIN = resolveOpencodeBin();
 
 /** Free no-key models exposed by the opencode CLI (verified on v1.18.30). */
 export const OPENCODE_FREE_MODELS: string[] = [
@@ -133,27 +150,44 @@ export function stripOpencodeProgress(raw: string): string {
  */
 export function runOpencode(prompt: string, modelId: string, timeoutMs = RUN_TIMEOUT_MS): Promise<OpencodeRunResult> {
   return new Promise((resolve, reject) => {
-    execFile(
-      OPENCODE_BIN,
-      ['run', '-m', modelId, prompt],
-      { timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024, windowsHide: true },
-      (error, stdout, stderr) => {
-        const content = stripOpencodeProgress(stdout || '');
-        const stderrText = (stderr || '').trim();
+    const child = spawn(OPENCODE_BIN, ['run', '-m', modelId, prompt], {
+      // 'ignore' so the CLI never waits on stdin; pipes only for capturing output
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
 
-        if (error && !content) {
-          reject(new Error(stderrText || error.message || 'opencode returned no output'));
-          return;
-        }
+    let stdout = '';
+    let stderr = '';
 
-        const exitCode =
-          error && typeof error === 'object' && 'code' in error && typeof (error as { code?: unknown }).code === 'number'
-            ? ((error as { code: number }).code ?? null)
-            : null;
+    const killTimer = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(new Error('opencode timed out'));
+    }, timeoutMs);
 
-        resolve({ content, exitCode });
-      },
-    );
+    child.stdout?.setEncoding('utf8');
+    child.stderr?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr?.on('data', (chunk: string) => {
+      stderr += chunk;
+    });
+
+    child.on('error', (err) => {
+      clearTimeout(killTimer);
+      reject(err);
+    });
+
+    child.on('close', (code) => {
+      clearTimeout(killTimer);
+      const content = stripOpencodeProgress(stdout || '');
+      const stderrText = stripOpencodeProgress(stderr || '');
+      if (code !== 0 && !content) {
+        reject(new Error(stderrText || `opencode exited with code ${code}`));
+        return;
+      }
+      resolve({ content, exitCode: code });
+    });
   });
 }
 
